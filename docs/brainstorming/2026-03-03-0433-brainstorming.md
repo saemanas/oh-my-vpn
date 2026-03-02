@@ -1,5 +1,5 @@
 ---
-title: "Oh My VPN -- multi-cloud on-demand VPN automation"
+title: "Oh My VPN"
 date: 2026-03-03
 status: complete
 upstream: null
