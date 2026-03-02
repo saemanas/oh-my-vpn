@@ -60,15 +60,40 @@ Research conducted before ideation to establish technical feasibility.
 
 ### C. Cost Comparison
 
+#### a. Instance Cost Only
+
 | Scenario | Hetzner (CAX11) | AWS (t4g.nano) | GCP (e2-micro) | VPN Subscription |
 | --- | --- | --- | --- | --- |
 | Hourly rate | $0.0056/hr | $0.0042/hr | $0.0084/hr | -- |
-| 1hr/day x 30 days | **$0.17/month** | **$0.13/month** | **$0.25/month** | **$5--12/month** |
-| 4hr/day x 30 days | **$0.67/month** | **$0.50/month** | **$1.01/month** | **$5--12/month** |
-| Regions | 6 | 30+ | 42 | varies |
+| 1hr/day x 30 days | $0.17/month | $0.13/month | $0.25/month | $5--12/month |
+| 4hr/day x 30 days | $0.67/month | $0.50/month | $1.01/month | $5--12/month |
 
-Savings: 80--98% compared to subscription VPN across all providers.
-AWS is cheapest per hour, GCP has most regions, Hetzner has simplest setup (pre-built WireGuard image).
+#### b. Data Transfer (Egress) -- Critical for VPN
+
+| | Hetzner | AWS | GCP |
+| --- | --- | --- | --- |
+| Included traffic | **20TB/month free** | 100GB/month free | 200GB/month free |
+| Overage cost | $1.20/TB | **$90/TB** ($0.09/GB) | **$120/TB** ($0.12/GB) |
+
+#### c. Total Cost (Realistic VPN Usage: 1hr streaming/day ≈ 150GB/month)
+
+| | Hetzner | AWS | GCP | VPN Subscription |
+| --- | --- | --- | --- | --- |
+| Instance | $0.17 | $0.13 | $0.25 | -- |
+| Egress (150GB) | **$0** (within 20TB) | **$4.50** (50GB overage) | **$0** (within 200GB) | -- |
+| **Total** | **$0.17** | **$4.63** | **$0.25** | **$5--12** |
+
+#### d. Summary
+
+| Provider | Strength | Weakness |
+| --- | --- | --- |
+| **Hetzner** | Cheapest total cost, 20TB free traffic, pre-built WireGuard image | Fewest regions (6) |
+| **AWS** | Most mature API, 30+ regions | Egress fees kill the savings |
+| **GCP** | Most regions (42), e2-micro always-free tier | Higher instance cost than Hetzner |
+
+**Hetzner is the clear winner for VPN use cases** due to generous traffic inclusion.
+AWS egress pricing makes it expensive despite cheap instances.
+GCP is a solid second choice with more regions and a free tier.
 
 ### D. Existing Similar Projects
 
