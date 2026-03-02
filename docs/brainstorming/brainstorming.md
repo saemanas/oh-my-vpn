@@ -1,8 +1,8 @@
 ---
 topic: "Oh My VPN -- multi-cloud on-demand VPN automation"
 status: complete
-idea_count: 53
-cluster_count: 7
+idea_count: 57
+cluster_count: 8
 date: 2026-03-03
 ---
 
@@ -13,8 +13,8 @@ date: 2026-03-03
 | Field | Value |
 | --- | --- |
 | Topic | On-demand VPN server automation using cloud providers (Hetzner, AWS, GCP) with a macOS menu bar app |
-| Total Ideas | 53 (1 merged duplicate) |
-| Clusters | 7 (all starred) |
+| Total Ideas | 57 (1 merged duplicate) |
+| Clusters | 8 (all starred) |
 | Techniques Used | Free Association, Role Storming, Assumption Mapping, Pain Chain, Jobs to Be Done, How Might We |
 
 ## 2. Research Findings
@@ -103,7 +103,26 @@ Research conducted before ideation to establish technical feasibility.
 AWS egress pricing makes it expensive despite cheap instances.
 GCP is a solid second choice with more regions and a free tier.
 
-### D. Existing Similar Projects
+### E. E2E Testing for Tauri macOS Apps
+
+| Method | Cost | macOS | Notes |
+| --- | --- | --- | --- |
+| **tauri-webdriver** (danielraffel) | Free (MIT/Apache 2.0) | Yes | Open-source W3C WebDriver for WKWebView. Released 2026-02. **Selected.** |
+| CrabNebula tauri-driver | macOS requires subscription | Yes (paid) | Official Tauri partner |
+| TestDriver.ai | Mac = Enterprise only | No (cost prohibitive) | AI vision-based, $2000+/month for Mac |
+| Playwright (web layer only) | Free | Yes | Tests frontend at localhost, not native app |
+| AppleScript + Accessibility API | Free | Yes | Native macOS, manual script writing |
+
+**Testing strategy**:
+
+| Layer | Tool | Cost |
+| --- | --- | --- |
+| Rust backend | `cargo test` | Free |
+| TS frontend | Vitest + Playwright (localhost:1420) | Free |
+| Integration | Tauri Mock Runtime | Free |
+| E2E (native app) | tauri-webdriver + WebDriverIO | Free |
+
+### F. Existing Similar Projects
 
 | Project | Approach |
 | --- | --- |
@@ -204,6 +223,14 @@ All 7 clusters starred.
 | 48 | Debug log viewer (in-app) |
 | 50 | First-run onboarding -- provider select -> key input -> first connection guide |
 
+### ★ H. Testing
+
+| # | Idea |
+| --- | --- |
+| 55 | E2E testing via tauri-webdriver (open-source W3C WebDriver for macOS WKWebView) |
+| 56 | Multi-layer test strategy: cargo test (Rust) + Vitest (TS) + Playwright (web) + tauri-webdriver (native) |
+| 57 | CI integration for automated E2E tests on macOS |
+
 ## 4. All Ideas (Raw)
 
 1. Open-source project
@@ -260,3 +287,6 @@ All 7 clusters starred.
 52. Show hourly cost next to each region during selection
 53. Auto-recommend cheapest provider/region combination
 54. Provider pricing page links for manual review (Hetzner, AWS, GCP)
+55. E2E testing via tauri-webdriver (open-source W3C WebDriver for macOS WKWebView)
+56. Multi-layer test strategy: cargo test (Rust) + Vitest (TS) + Playwright (web) + tauri-webdriver (native)
+57. CI integration for automated E2E tests on macOS
