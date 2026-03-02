@@ -1,7 +1,7 @@
 ---
 topic: "Oh My VPN -- Hetzner-based on-demand VPN automation"
 status: complete
-idea_count: 50
+idea_count: 54
 cluster_count: 7
 date: 2026-03-03
 ---
@@ -57,6 +57,14 @@ Research conducted before ideation to establish technical feasibility.
 - No pre-built WireGuard image (use Ubuntu + startup script)
 - Regions: 42 regions worldwide (us-central1, europe-west1, asia-northeast1, etc.)
 - Free Tier: e2-micro 1 instance always free (us-west1, us-central1, us-east1 only)
+
+#### d. Pricing API Availability
+
+| Provider | Pricing API | Auth Required | Pricing Page |
+| --- | --- | --- | --- |
+| Hetzner | `GET /v1/server_types` (includes hourly/monthly price) | Yes (API token) | https://www.hetzner.com/cloud/pricing/ |
+| AWS | Third-party `go.runs-on.com/api/instances` (free, hourly updates) | No | https://aws.amazon.com/ec2/pricing/on-demand/ |
+| GCP | Cloud Billing Catalog API | Yes (API key) | https://cloud.google.com/compute/vm-instance-pricing |
 
 ### C. Cost Comparison
 
@@ -173,6 +181,10 @@ All 7 clusters starred.
 | 30 | Daily/monthly cost cap -- auto-shutdown on exceed |
 | 43 | Session history -- date, region, duration, cost |
 | 44 | Monthly cost report (per provider, per region) |
+| 51 | Real-time pricing query via provider APIs |
+| 52 | Show hourly cost next to each region during selection |
+| 53 | Auto-recommend cheapest provider/region |
+| 54 | Provider pricing page links (view in browser without API key) |
 
 ### ★ G. UX & Onboarding
 
@@ -242,3 +254,7 @@ All 7 clusters starred.
 48. Debug log viewer (in-app)
 49. Simple mode (auto defaults) vs advanced mode (custom instance/OS/firewall)
 50. First-run onboarding -- provider select -> key input -> first connection guide
+51. Real-time pricing query via provider APIs (Hetzner /server_types, AWS Pricing API, GCP Billing Catalog)
+52. Show hourly cost next to each region during selection
+53. Auto-recommend cheapest provider/region combination
+54. Provider pricing page links for manual review (Hetzner, AWS, GCP)
