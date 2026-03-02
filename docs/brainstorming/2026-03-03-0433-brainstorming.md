@@ -1,9 +1,10 @@
 ---
-topic: "Oh My VPN -- multi-cloud on-demand VPN automation"
+title: "Oh My VPN -- multi-cloud on-demand VPN automation"
+date: 2026-03-03
 status: complete
+upstream: null
 idea_count: 57
 cluster_count: 8
-date: 2026-03-03
 ---
 
 # Brainstorming: Oh My VPN
