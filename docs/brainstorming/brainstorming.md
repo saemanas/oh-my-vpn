@@ -1,7 +1,7 @@
 ---
-topic: "Oh My VPN -- Hetzner-based on-demand VPN automation"
+topic: "Oh My VPN -- multi-cloud on-demand VPN automation"
 status: complete
-idea_count: 54
+idea_count: 53
 cluster_count: 7
 date: 2026-03-03
 ---
@@ -13,7 +13,7 @@ date: 2026-03-03
 | Field | Value |
 | --- | --- |
 | Topic | On-demand VPN server automation using cloud providers (Hetzner, AWS, GCP) with a macOS menu bar app |
-| Total Ideas | 50 |
+| Total Ideas | 53 (1 merged duplicate) |
 | Clusters | 7 (all starred) |
 | Techniques Used | Free Association, Role Storming, Assumption Mapping, Pain Chain, Jobs to Be Done, How Might We |
 
@@ -132,11 +132,12 @@ All 7 clusters starred.
 
 | # | Idea |
 | --- | --- |
+| 9 | CLI-based interface (alternative to menu bar) |
 | 13 | macOS-only menu bar app (main interface) |
 | 18 | Tauri-based (TS frontend + Rust backend) |
+| 45 | Update settings -- auto / notify-only / manual |
 | 46 | Install via `brew install` |
 | 47 | macOS dark/light mode auto-adaptation |
-| 45 | Update settings -- auto / notify-only / manual |
 
 ### ★ C. Connection & Server Management
 
@@ -192,9 +193,10 @@ All 7 clusters starred.
 | --- | --- |
 | 7 | Geo-restricted content bypass (Netflix, YouTube, etc.) |
 | 8 | Country-restricted site access |
+| 20 | Cloud account sign-up guide for new users (in-app or link) |
+| 21 | Per-provider step-by-step walkthrough from sign-up to API key |
 | 22 | Provider sign-up page direct links (in-app -> browser) |
 | 23 | API key issuance guide -- official docs links |
-| 24 | First-run onboarding flow |
 | 27 | Menu bar icon clearly shows VPN status |
 | 40 | Global keyboard shortcut -- VPN connect/disconnect toggle |
 | 41 | macOS native notifications -- "Server ready", "Connected", "Disconnected" |
@@ -227,7 +229,7 @@ All 7 clusters starred.
 21. Per-provider step-by-step walkthrough from sign-up to API key
 22. Provider sign-up page direct links (in-app -> browser)
 23. API key issuance guide -- official docs links
-24. First-run onboarding flow: provider select -> account check -> sign-up or key input
+24. ~~Merged into #50~~ First-run onboarding flow
 25. Auto-shutdown timer (e.g., auto disconnect & destroy after 1 hour)
 26. Idle detection -- alert when no VPN traffic
 27. Menu bar icon color/animation for clear VPN status
