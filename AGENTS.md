@@ -16,7 +16,10 @@
 
 ### B. Architecture
 
-<!-- Format: - [{file_name}]({relative_path}) -->
+- [context](docs/architecture/context.md)
+- [containers](docs/architecture/containers.md)
+- [deployment](docs/architecture/deployment.md)
+- [cross-cutting-concepts](docs/architecture/cross-cutting-concepts.md)
 
 ### C. ADR
 
@@ -24,7 +27,7 @@
 
 ### D. Reference
 
-<!-- Format: - [{file_name}]({relative_path}) -->
+- [glossary](docs/glossary.md)
 
 ---
 
