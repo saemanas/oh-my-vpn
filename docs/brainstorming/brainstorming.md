@@ -30,22 +30,45 @@ Research conducted before ideation to establish technical feasibility.
 | Algo VPN | AGPLv3 | Easy setup by Trail of Bits |
 | Firezone | Apache 2.0 | WireGuard-based with web UI |
 
-### B. Hetzner hcloud Automation
+### B. Cloud Provider Automation
 
-- Hourly billing: CAX11 (ARM) = EUR 0.0053/hr
-- `hcloud server create` / `hcloud server delete` -- full CLI automation
+#### a. Hetzner
+
+- Hourly billing: CAX11 (ARM) = EUR 0.0053/hr (~$0.0056/hr)
+- CLI: `hcloud server create` / `hcloud server delete`
 - cloud-init support: auto-install WireGuard on boot
 - Pre-built WireGuard image: `--image wireguard`
+- Regions: Germany (Falkenstein, Nuremberg), Finland (Helsinki), US (Ashburn, Hillsboro), Singapore
+
+#### b. AWS
+
+- Hourly billing: t4g.nano (ARM, 2vCPU/0.5GB) = $0.0042/hr
+- CLI: `aws ec2 run-instances` / `aws ec2 terminate-instances`
+- User data (cloud-init) support: auto-install WireGuard on boot
+- No pre-built WireGuard image (use Ubuntu + user data script)
+- Regions: 30+ regions worldwide (us-east-1, eu-west-1, ap-northeast-1, etc.)
+- Free Tier: t2.micro 750hrs/month for 12 months
+
+#### c. GCP
+
+- Hourly billing: e2-micro (shared 2vCPU/1GB) = $0.0084/hr
+- CLI: `gcloud compute instances create` / `gcloud compute instances delete`
+- Startup script support: auto-install WireGuard on boot
+- No pre-built WireGuard image (use Ubuntu + startup script)
+- Regions: 42 regions worldwide (us-central1, europe-west1, asia-northeast1, etc.)
+- Free Tier: e2-micro 1 instance always free (us-west1, us-central1, us-east1 only)
 
 ### C. Cost Comparison
 
-| Scenario | Cost |
-| --- | --- |
-| Typical VPN subscription | EUR 5--12/month |
-| Hetzner 1hr/day x 30 days | EUR 0.16/month |
-| Hetzner 4hr/day x 30 days | EUR 0.64/month |
+| Scenario | Hetzner (CAX11) | AWS (t4g.nano) | GCP (e2-micro) | VPN Subscription |
+| --- | --- | --- | --- | --- |
+| Hourly rate | $0.0056/hr | $0.0042/hr | $0.0084/hr | -- |
+| 1hr/day x 30 days | **$0.17/month** | **$0.13/month** | **$0.25/month** | **$5--12/month** |
+| 4hr/day x 30 days | **$0.67/month** | **$0.50/month** | **$1.01/month** | **$5--12/month** |
+| Regions | 6 | 30+ | 42 | varies |
 
-Savings: 90--98% compared to subscription VPN.
+Savings: 80--98% compared to subscription VPN across all providers.
+AWS is cheapest per hour, GCP has most regions, Hetzner has simplest setup (pre-built WireGuard image).
 
 ### D. Existing Similar Projects
 
