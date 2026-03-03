@@ -60,7 +60,7 @@ The Rust Backend is a single process with the following internal modules. These 
 
 ```mermaid
 flowchart TD
-    ipc["<b>IPC Layer</b><br/>Tauri command whitelist"]
+    ipc["<b>Tauri IPC</b><br/>Command whitelist"]
     providerManager["<b>Provider Manager</b><br/>Cloud API abstraction"]
     serverLifecycle["<b>Server Lifecycle</b><br/>Provisioning and destruction"]
     vpnManager["<b>VPN Manager</b><br/>WireGuard tunnel"]
@@ -77,7 +77,7 @@ flowchart TD
     class ipc,providerManager,serverLifecycle,vpnManager,sessionTracker,keychainAdapter module
 ```
 
-### A. IPC Layer
+### A. Tauri IPC
 
 Tauri command whitelist. Routes frontend requests to the appropriate backend module. Only explicitly allowed commands pass through (NFR-SEC-7).
 

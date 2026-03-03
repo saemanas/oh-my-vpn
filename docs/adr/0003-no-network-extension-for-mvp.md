@@ -40,6 +40,31 @@ Chosen option: "No Network Extension", because ADR-0001's wg-quick approach alre
 - **Bad**: If Apple restricts sudo-based utun creation in a future macOS version, migration to Network Extension becomes mandatory
 - **Neutral**: v2.0 `brew install` distribution (PRD) is compatible with this approach
 
+## Diagram
+
+```mermaid
+flowchart LR
+    subgraph chosen["Chosen: sudo path"]
+        app1["Oh My VPN.app<br/>(single binary)"]
+        app1 -->|"osascript sudo"| wg1["wg-quick"]
+        wg1 -->|"creates utun"| tun1[("WireGuard Tunnel")]
+    end
+
+    subgraph rejected["Rejected: Network Extension path"]
+        app2["Oh My VPN.app"]
+        app2 -->|"IPC"| ne["Network Extension<br/>(separate binary)"]
+        ne -->|"NE Framework"| tun2[("WireGuard Tunnel")]
+    end
+
+    classDef chosen_style fill:#438dd5,stroke:#3c7fc0,color:#fff
+    classDef rejected_style fill:#999,stroke:#888,color:#fff
+
+    class app1,wg1,tun1 chosen_style
+    class app2,ne,tun2 rejected_style
+```
+
+The sudo path (blue) keeps the app as a single binary -- no separate Network Extension process to build, sign, or maintain. The rejected Network Extension path (gray) would require a separate binary communicating via IPC, plus Apple Developer Program enrollment for the entitlement.
+
 ## Links
 
 - Related: [ADR-0001](0001-use-wireguard-go-with-wg-quick.md), PRD OQ-3

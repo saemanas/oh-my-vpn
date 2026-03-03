@@ -73,5 +73,5 @@ The Rust backend orchestrates `wg-quick` as a subprocess. Privilege escalation i
 
 ## Links
 
-- Related: PRD OQ-1, OQ-3
+- Related: [ADR-0003](0003-no-network-extension-for-mvp.md), PRD OQ-1, OQ-3
 - Principles: Fail Fast, Reversibility

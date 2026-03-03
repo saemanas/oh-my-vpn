@@ -46,7 +46,7 @@ Chosen option: "Rust SDK", because it provides type-safe integration without ext
 
 ```mermaid
 flowchart TD
-    ipc[IPC Layer] --> serverLifecycle[Server Lifecycle]
+    ipc[Tauri IPC] --> serverLifecycle[Server Lifecycle]
     serverLifecycle --> providerManager[Provider Manager]
 
     providerManager --> trait{{"ProviderTrait"}}
@@ -70,9 +70,9 @@ flowchart TD
     class trait trait
 ```
 
-Each cloud provider implements a common `ProviderTrait`. The SDK crate is encapsulated within its provider module -- no SDK types leak into the rest of the application. This enables sequential development (Hetzner first) and independent replacement (Risk R-5).
+Each cloud provider implements a common `ProviderTrait`. The SDK crate is encapsulated within its provider module -- no SDK types leak into the rest of the application. This enables sequential development (Hetzner first) and independent replacement (Risk R-5). Uses `flowchart` with C4 `classDef` styling instead of `C4Component` for better layout control with multiple provider nodes.
 
 ## Links
 
-- Related: [ADR-0001](0001-use-wireguard-go-with-wg-quick.md), PRD OQ-2, Risk R-5, Risk R-7
+- Related: [ADR-0001](0001-use-wireguard-go-with-wg-quick.md), [ADR-0006](0006-all-providers-in-mvp.md), PRD OQ-2, Risk R-5, Risk R-7
 - Principles: Dependency Inversion, Single Responsibility
