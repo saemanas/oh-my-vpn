@@ -44,32 +44,43 @@ Chosen option: "wireguard-go + wg-quick", because it provides a proven, stable t
 
 ## Diagram
 
+This diagram covers VPN tunnel management only -- the phase **after** Server Lifecycle has completed server provisioning and cloud-init. For the full connect flow, see [containers.md](../architecture/containers.md) (Server Lifecycle orchestrates Provider Manager then VPN Manager).
+
 ```mermaid
 sequenceDiagram
-    participant UI as Menu Bar UI
-    participant BE as Rust Backend
+    participant SL as Server Lifecycle
+    participant VM as VPN Manager
     participant OS as macOS (sudo)
     participant WG as wg-quick
 
-    UI->>BE: Connect request (provider, region)
-    BE->>BE: Generate ephemeral WireGuard key pair
-    BE->>BE: Write WireGuard config (permission 600)
-    BE->>OS: Execute wg-quick up (via osascript sudo)
+    SL->>VM: Tunnel up (server IP, server public key)
+    VM->>VM: Generate ephemeral WireGuard key pair
+    VM->>VM: Write WireGuard config (permission 600)
+    VM->>OS: Execute wg-quick up (via osascript sudo)
     OS->>WG: Run with root privileges
     WG->>WG: Create utun device, set routes, configure DNS
-    WG-->>BE: Exit code 0 (success)
-    BE->>BE: Delete config file
-    BE-->>UI: Connected (server IP, tunnel active)
 
-    UI->>BE: Disconnect request
-    BE->>OS: Execute wg-quick down (via osascript sudo)
+    alt wg-quick succeeds
+        WG-->>VM: Exit code 0
+        VM->>VM: Delete config file
+        VM-->>SL: Tunnel established
+    else wg-quick fails
+        WG-->>VM: Non-zero exit code + stderr
+        VM->>VM: Delete config file
+        VM->>VM: Delete ephemeral keys
+        VM-->>SL: Tunnel failed (error detail)
+        Note over SL: Server Lifecycle triggers<br/>auto-cleanup (FR-SL-4)
+    end
+
+    SL->>VM: Tunnel down
+    VM->>OS: Execute wg-quick down (via osascript sudo)
     OS->>WG: Tear down tunnel
-    WG-->>BE: Exit code 0 (success)
-    BE->>BE: Delete ephemeral keys
-    BE-->>UI: Disconnected
+    WG-->>VM: Exit code 0
+    VM->>VM: Delete ephemeral keys
+    VM-->>SL: Tunnel torn down
 ```
 
-The Rust backend orchestrates `wg-quick` as a subprocess. Privilege escalation is handled via `osascript` (macOS authorization dialog). The WireGuard config file exists only momentarily between write and tunnel establishment, then is deleted (NFR-SEC-6).
+The VPN Manager orchestrates `wg-quick` as a subprocess, called by Server Lifecycle. Privilege escalation is handled via `osascript` (macOS authorization dialog). The WireGuard config file exists only momentarily between write and tunnel establishment, then is deleted (NFR-SEC-6). On failure, Server Lifecycle handles auto-cleanup per the error handling strategy in [cross-cutting-concepts.md](../architecture/cross-cutting-concepts.md).
 
 ## Links
 

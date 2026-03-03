@@ -47,26 +47,34 @@ Chosen option: "All providers via Pricing API", because pricing accuracy is a co
 
 ```mermaid
 sequenceDiagram
-    participant UI as Menu Bar UI
-    participant BE as Rust Backend
-    participant Cache as Local Cache
-    participant API as Provider Pricing API
+    participant SL as Server Lifecycle
+    participant PM as Provider Manager
+    participant Cloud as Cloud Provider API
 
-    UI->>BE: Select provider, list regions
-    BE->>Cache: Check cached prices (provider, TTL)
+    SL->>PM: List regions with pricing (provider)
+    PM->>PM: Check internal cache (TTL)
+
     alt Cache hit
-        Cache-->>BE: Cached pricing data
+        PM-->>SL: Cached region + pricing data
     else Cache miss
-        BE->>API: Fetch pricing (Hetzner /pricing, AWS GetProducts, or GCP ListSkus)
-        API-->>BE: Pricing JSON
-        BE->>Cache: Store with TTL
+        PM->>Cloud: Fetch pricing via SDK (ADR-0002)
+        alt API succeeds
+            Cloud-->>PM: Pricing JSON
+            PM->>PM: Parse, store in cache with TTL
+            PM-->>SL: Region + pricing data
+        else API fails, stale cache exists
+            PM-->>SL: Stale pricing data (marked as cached)
+            Note over PM: Log warning, notify user<br/>prices may be outdated
+        else API fails, no cache
+            PM-->>SL: Error (pricing unavailable)
+            Note over SL: Surface error to user
+        end
     end
-    BE-->>UI: Region list with hourly costs
 ```
 
-The user selects a provider, and the Rust Backend fetches pricing from that provider's API. Responses are cached locally with a short TTL to balance freshness and performance (NFR-PERF-4: ≤ 5s). Each provider has a different pricing API format -- Hetzner returns simple JSON, while AWS and GCP require complex catalog filtering and parsing.
+Server Lifecycle requests region pricing from Provider Manager, which maintains an internal cache with a short TTL (e.g., 1 hour). Provider Manager fetches pricing via the provider's Rust SDK ([ADR-0002](0002-use-rust-sdk-for-cloud-providers.md)) -- Hetzner returns simple JSON from `/pricing`, while AWS (`GetProducts`) and GCP (`ListSkus`) require complex catalog filtering. On API failure, stale cached data is served with a warning; if no cache exists, an error is surfaced to the user. The cache is internal to Provider Manager -- not a separate module (see [containers.md](../architecture/containers.md)).
 
 ## Links
 
-- Related: [ADR-0006](0006-all-providers-in-mvp.md), PRD OQ-4
+- Related: [ADR-0002](0002-use-rust-sdk-for-cloud-providers.md), [ADR-0006](0006-all-providers-in-mvp.md), PRD OQ-4
 - Principles: Explicit over Implicit (prices shown are actual prices, not approximations)

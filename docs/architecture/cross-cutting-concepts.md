@@ -108,7 +108,7 @@ flowchart TD
 
 ### A. Detection Strategy
 
-On every app launch, the Session Tracker checks for persisted server state (server ID, provider, region). If state exists, the Provider Manager queries the cloud API to verify the server still exists. This ensures 100% detection rate (NFR-REL-1).
+On every app launch, the Session Tracker checks for persisted server state (server ID, provider, region). If state exists, the Provider Manager queries the cloud API to verify the server still exists. This ensures 100% detection rate (NFR-REL-1). Detection runs **asynchronously** after the menu bar is ready -- the app must reach the ready state within 3 seconds (NFR-PERF-3), so orphan detection must not block startup.
 
 ### B. State Persistence
 
@@ -181,3 +181,26 @@ Each cloud provider may require slightly different cloud-init scripts (Risk R-1)
 | GCP | Startup script metadata, firewall rules via Compute Engine API |
 
 Provider-specific scripts are maintained independently and tested per provider (Risk R-1 mitigation).
+
+---
+
+## 7. Update Integrity
+
+App updates are distributed via Tauri's built-in updater with GitHub Releases as a manual fallback ([ADR-0007](../adr/0007-tauri-updater-with-github-releases.md)). Update integrity is a cross-cutting security concern -- a compromised update binary could undermine all other security properties (credential storage, ephemeral keys, tunnel isolation).
+
+### A. Signature Verification
+
+Every update binary is signed with an Ed25519 key pair. The Tauri updater verifies the signature before applying the update:
+
+| Component | Location | Purpose |
+| --- | --- | --- |
+| Signing private key | CI environment secret (never on disk) | Signs update binaries during release build |
+| Verification public key | Embedded in app binary (`tauri.conf.json`) | Verifies downloaded update before installation |
+
+### B. Failure Handling
+
+| Failure | Behavior |
+| --- | --- |
+| Signature verification fails | Update rejected, user notified, manual download fallback offered |
+| Download interrupted | Retry up to 3 times, then notify user to download from GitHub Releases |
+| Update endpoint unreachable | Silent skip, app continues with current version |

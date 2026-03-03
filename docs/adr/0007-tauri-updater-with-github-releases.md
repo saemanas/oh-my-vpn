@@ -48,17 +48,20 @@ flowchart LR
     check -->|Up to Date| ready[Continue]
 
     notify --> choice{User Choice}
-    choice -->|Install| download[Download + Verify<br/>Signature]
+    choice -->|Install| download[Download Update]
     choice -->|Skip| ready
 
-    download --> restart[Restart App]
+    download --> verify{Verify Ed25519<br/>Signature}
+    verify -->|Valid| restart[Restart App]
+    verify -->|Invalid| fail[Notify User:<br/>Update Failed]
+    fail --> fallback
 
-    gh[GitHub Releases] -.->|Manual<br/>Fallback| user([User])
+    gh[GitHub Releases] -.->|Manual Fallback| fallback([Download from<br/>GitHub Releases])
 ```
 
-The Tauri updater checks a JSON endpoint (hosted on GitHub Releases) on each app launch. If a new version is available, the user is prompted to install. The update binary is verified against an Ed25519 signature before installation. Users who prefer manual updates can always download directly from the GitHub Releases page.
+The Tauri updater checks a JSON endpoint (hosted on GitHub Releases) on each app launch. If a new version is available, the user is prompted to install. The update binary is verified against an Ed25519 signature before installation -- if verification fails, the user is notified and can fall back to manual download from the GitHub Releases page. Users who prefer manual updates can always use GitHub Releases directly.
 
 ## Links
 
-- Related: PRD OQ-6
+- Related: [deployment.md](../architecture/deployment.md), PRD OQ-6
 - Principles: Reversibility (users can choose manual over auto-update)

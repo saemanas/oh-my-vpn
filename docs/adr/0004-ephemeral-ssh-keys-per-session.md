@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-Cloud providers require or strongly recommend an SSH key when creating a server instance. Oh My VPN provisions servers via cloud-init (ADR-0002), so SSH access is only needed during the initial provisioning phase -- never afterwards. The SSH key strategy must align with the product's ephemeral-by-design philosophy.
+Cloud providers require or strongly recommend an SSH key when creating a server instance. Oh My VPN provisions servers via cloud-init ([ADR-0001](0001-use-wireguard-go-with-wg-quick.md)), so SSH access is only needed during the initial provisioning phase -- never afterwards. The SSH key strategy must align with the product's ephemeral-by-design philosophy.
 
 This resolves PRD Open Question OQ-7: "Is SSH key required for provisioning? If so, what is the ephemeral key generation/deletion strategy?"
 
@@ -45,32 +45,49 @@ Chosen option: "Ephemeral SSH key per session", because it maintains the zero-pe
 
 ```mermaid
 sequenceDiagram
-    participant BE as Rust Backend
+    participant SL as Server Lifecycle
+    participant PM as Provider Manager
     participant Cloud as Cloud Provider API
+    participant VM as VPN Manager
 
     rect rgb(230, 245, 255)
-        note over BE,Cloud: Provisioning Phase
-        BE->>BE: Generate ephemeral SSH key pair (Ed25519)
-        BE->>Cloud: Register public key
-        Cloud-->>BE: Key ID
-        BE->>Cloud: Create server (key ID + cloud-init)
-        Cloud-->>BE: Server created, cloud-init running
+        note over SL,Cloud: Provisioning Phase
+        SL->>SL: Generate ephemeral SSH key pair (Ed25519)
+        SL->>PM: Register public key
+        PM->>Cloud: Create SSH key
+        Cloud-->>PM: Key ID
+        PM-->>SL: Key ID
+        SL->>PM: Create server (key ID + cloud-init)
+        PM->>Cloud: Create instance
+        Cloud-->>PM: Server created, cloud-init running
+        PM-->>SL: Server info (IP, ID)
     end
 
-    rect rgb(255, 240, 230)
-        note over BE,Cloud: Cleanup Phase (server running)
-        BE->>Cloud: Delete registered SSH key (by Key ID)
-        Cloud-->>BE: Key deleted
-        BE->>BE: Delete local key pair from memory
-    end
+    alt Provisioning succeeds
+        rect rgb(255, 240, 230)
+            note over SL,Cloud: Cleanup Phase
+            SL->>PM: Delete registered SSH key (by Key ID)
+            PM->>Cloud: Delete SSH key
+            Cloud-->>PM: Key deleted
+            SL->>SL: Delete local key pair from memory
+        end
 
-    rect rgb(230, 255, 230)
-        note over BE: Connection Phase
-        BE->>BE: Establish WireGuard tunnel (no SSH needed)
+        rect rgb(230, 255, 230)
+            note over SL,VM: Connection Phase
+            SL->>VM: Tunnel up (no SSH needed)
+            Note over VM: Uses own ephemeral<br/>WireGuard key pair (ADR-0001)
+        end
+    else Provisioning fails
+        SL->>PM: Delete registered SSH key (by Key ID)
+        PM->>Cloud: Delete SSH key
+        SL->>SL: Delete local key pair from memory
+        SL->>PM: Destroy server (auto-cleanup, FR-SL-4)
+        PM->>Cloud: Delete instance
+        Note over SL: Notify user with error detail
     end
 ```
 
-The SSH key exists only during the provisioning phase. Once the server is running and cloud-init has configured WireGuard, the SSH key is deleted from both the cloud provider and local memory. The subsequent WireGuard connection uses its own ephemeral key pair (ADR-0001).
+Server Lifecycle orchestrates the SSH key lifecycle, delegating cloud API calls to Provider Manager ([ADR-0002](0002-use-rust-sdk-for-cloud-providers.md)). The SSH key exists only during the provisioning phase. Once the server is running and cloud-init has configured WireGuard, the SSH key is deleted from both the cloud provider and local memory. On provisioning failure, cleanup runs before the error is surfaced (see [cross-cutting-concepts.md](../architecture/cross-cutting-concepts.md) error handling strategy). The subsequent WireGuard connection uses its own ephemeral key pair ([ADR-0001](0001-use-wireguard-go-with-wg-quick.md)).
 
 ## Links
 

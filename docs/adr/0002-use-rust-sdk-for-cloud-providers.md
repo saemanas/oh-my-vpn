@@ -46,9 +46,10 @@ Chosen option: "Rust SDK", because it provides type-safe integration without ext
 
 ```mermaid
 flowchart TD
-    ipc[Tauri IPC] --> serverLifecycle[Server Lifecycle]
-    serverLifecycle --> providerManager[Provider Manager]
+    serverLifecycle[Server Lifecycle] --> providerManager[Provider Manager]
+    sessionTracker[Session Tracker] -->|"orphan detection<br/>(FR-SL-6)"| providerManager
 
+    providerManager --> keychainAdapter[Keychain Adapter]
     providerManager --> trait{{"ProviderTrait"}}
 
     trait --> hetzner["HetznerProvider<br/><i>hcloud crate</i>"]
@@ -59,18 +60,20 @@ flowchart TD
     aws --> awsApi["AWS EC2 API"]
     gcp --> gcpApi["GCP Compute API"]
 
+    keychainAdapter --> keychain[("macOS Keychain")]
+
     classDef module fill:#438dd5,stroke:#3c7fc0,color:#fff
     classDef sdk fill:#2d6da3,stroke:#256091,color:#fff
     classDef external fill:#999,stroke:#888,color:#fff
     classDef trait fill:#f9a825,stroke:#f57f17,color:#333
 
-    class ipc,serverLifecycle,providerManager module
+    class serverLifecycle,sessionTracker,providerManager,keychainAdapter module
     class hetzner,aws,gcp sdk
-    class hetznerApi,awsApi,gcpApi external
+    class hetznerApi,awsApi,gcpApi,keychain external
     class trait trait
 ```
 
-Each cloud provider implements a common `ProviderTrait`. The SDK crate is encapsulated within its provider module -- no SDK types leak into the rest of the application. This enables sequential development (Hetzner first) and independent replacement (Risk R-5). Uses `flowchart` with C4 `classDef` styling instead of `C4Component` for better layout control with multiple provider nodes.
+Each cloud provider implements a common `ProviderTrait`. The SDK crate is encapsulated within its provider module -- no SDK types leak into the rest of the application. Provider Manager retrieves API keys from the Keychain Adapter before making SDK calls. Both Server Lifecycle (provisioning/destruction) and Session Tracker (orphaned server detection) depend on Provider Manager, matching the module dependency structure in [containers.md](../architecture/containers.md). This enables sequential development (Hetzner first) and independent replacement (Risk R-5).
 
 ## Links
 

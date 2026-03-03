@@ -89,7 +89,7 @@ Unified interface over Hetzner, AWS, and GCP APIs. Each cloud provider implement
 
 ### C. Server Lifecycle
 
-Orchestrates server provisioning (cloud-init with WireGuard + firewall), destruction on disconnect, auto-cleanup on failure, orphaned server detection on app launch.
+Orchestrates server provisioning (cloud-init with WireGuard + firewall), destruction on disconnect, auto-cleanup on failure, orphaned server detection on app launch. The disconnect-to-destruction flow (tunnel teardown + server deletion via provider API) must complete within 30 seconds (NFR-PERF-2).
 
 ### D. VPN Manager
 
