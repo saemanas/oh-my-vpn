@@ -30,6 +30,7 @@
 - [deployment.md](docs/architecture/deployment.md)
 - [cross-cutting-concepts.md](docs/architecture/cross-cutting-concepts.md)
 - [quality-attributes.md](docs/architecture/quality-attributes.md)
+- [drift-prevention.md](docs/architecture/drift-prevention.md)
 
 ### E. ADR
 
