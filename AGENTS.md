@@ -20,7 +20,8 @@
 
 ### C. UI Design
 
-<!-- Format: - [{title}]({relative_path}) -->
+- [ui-design](docs/ui-design/2026-03-04-0123-ui-design.md)
+- [tokens.css](docs/ui-design/tokens.css)
 
 ### D. Architecture
 
