@@ -1,0 +1,33 @@
+name: Architecture Review Label
+
+on:
+  pull_request:
+    paths:
+      # Architecture documentation
+      - "docs/adr/**"
+      - "docs/architecture/**"
+      # New services or modules (Tauri + Rust project)
+      - "src-tauri/Cargo.toml"
+      - "src-tauri/tauri.conf.json"
+      - "src-tauri/capabilities/**"
+      - "package.json"
+      # Backend module changes
+      - "src-tauri/src/**/*.rs"
+      # Data model changes
+      - "**/*.schema.*"
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['architecture-review']
+            });
