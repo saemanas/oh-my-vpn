@@ -25,11 +25,20 @@
 
 ### D. Architecture
 
-<!-- Format: - [{file_name}]({relative_path}) -->
+- [context.md](docs/architecture/context.md)
+- [containers.md](docs/architecture/containers.md)
+- [deployment.md](docs/architecture/deployment.md)
+- [cross-cutting-concepts.md](docs/architecture/cross-cutting-concepts.md)
 
 ### E. ADR
 
-<!-- Format: - [ADR-NNNN: {title}]({relative_path}) -->
+- [ADR-0001: Use wireguard-go with wg-quick](docs/adr/0001-use-wireguard-go-with-wg-quick.md)
+- [ADR-0002: Use Rust SDK for Cloud Providers](docs/adr/0002-use-rust-sdk-for-cloud-providers.md)
+- [ADR-0003: No Network Extension for MVP](docs/adr/0003-no-network-extension-for-mvp.md)
+- [ADR-0004: Ephemeral SSH Keys Per Session](docs/adr/0004-ephemeral-ssh-keys-per-session.md)
+- [ADR-0005: Use Provider Pricing API](docs/adr/0005-use-provider-pricing-api.md)
+- [ADR-0006: All Providers in MVP](docs/adr/0006-all-providers-in-mvp.md)
+- [ADR-0007: Tauri Updater with GitHub Releases](docs/adr/0007-tauri-updater-with-github-releases.md)
 
 ### F. Reference
 
