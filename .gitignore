@@ -91,6 +91,7 @@ logs/
 *~
 
 # ─── Project-specific ─────────────────────────────────────────────────────────
+PLAN.md
 .playwright-cli/
 .pi/
-PLAN.md
+tmp/
