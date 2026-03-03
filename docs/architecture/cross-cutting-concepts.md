@@ -22,7 +22,7 @@ flowchart LR
 ### A. Rules
 
 - API keys are **never** stored in files, environment variables, or application memory beyond the immediate operation (NFR-SEC-1)
-- WireGuard keys are **ephemeral** -- generated per session, held in memory during the session, deleted on teardown (NFR-SEC-2)
+- WireGuard keys are **ephemeral** -- generated per session, held in memory during the session, deleted on teardown (NFR-SEC-2). SSH keys follow the same ephemeral pattern ([ADR-0004](../adr/0004-ephemeral-ssh-keys-per-session.md))
 - WireGuard config files have permission `600` and are deleted immediately after tunnel establishment (NFR-SEC-6)
 
 ---
@@ -160,7 +160,7 @@ Status changes are communicated via macOS native notifications (FR-MN-2). This i
 
 ## 6. Cloud-Init Strategy
 
-Server provisioning uses cloud-init to automate WireGuard installation and configuration. This is a cross-cutting concern because it involves the Server Lifecycle, VPN Manager, and Provider Manager.
+Server provisioning uses cloud-init to automate WireGuard installation and configuration ([ADR-0001](../adr/0001-use-wireguard-go-with-wg-quick.md)). This is a cross-cutting concern because it involves the Server Lifecycle, VPN Manager, and Provider Manager.
 
 ### A. cloud-init Script Responsibilities
 
