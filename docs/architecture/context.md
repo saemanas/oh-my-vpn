@@ -1,8 +1,8 @@
 # Context and Scope
 
-Oh My VPN is a macOS menu bar application that automates on-demand VPN server provisioning. Users create, connect to, and destroy their own WireGuard VPN servers across multiple cloud providers in one click.
+Oh My VPN is a macOS menu bar application that replaces fixed-cost VPN subscriptions ($5--12/month) with pay-as-you-go cloud instances ($0.17--$4.63/month). Users create, connect to, and destroy their own WireGuard VPN servers across multiple cloud providers in one click -- gaining full server control, zero-log guarantees, and dramatic cost savings.
 
-This document defines the system boundary -- what Oh My VPN is, who interacts with it, and what external systems it depends on.
+This document defines the system boundary from a **business perspective** -- who uses Oh My VPN, what value they get, and what external systems are involved. For technical internals, see [containers.md](containers.md).
 
 ---
 
@@ -10,20 +10,29 @@ This document defines the system boundary -- what Oh My VPN is, who interacts wi
 
 ```mermaid
 flowchart TD
-    user["👤 <b>User</b><br/>Creates, connects to, and<br/>destroys VPN servers"]
-    ohMyVpn["<b>Oh My VPN</b><br/><i>[macOS menu bar app]</i><br/>Provisions on-demand servers<br/>and establishes WireGuard tunnels"]
-    cloudApi["<b>Cloud Provider API</b><br/><i>[External]</i><br/>Hetzner, AWS, GCP"]
-    keychain["<b>macOS Keychain</b><br/><i>[External]</i><br/>Credential storage"]
+    privacy["👤 <b>Privacy-Conscious User</b><br/>Wants zero-log VPN<br/>with full server control"]
+    geo["👤 <b>Geo-Bypass User</b><br/>Wants region-specific<br/>content access"]
+    cost["👤 <b>Cost-Sensitive User</b><br/>Wants pay-as-you-go<br/>instead of fixed subscription"]
+    dev["👤 <b>Developer</b><br/>Wants automated<br/>VPN provisioning"]
 
-    user -->|"GUI"| ohMyVpn
-    ohMyVpn -->|"HTTPS"| cloudApi
-    ohMyVpn -->|"Security Framework"| keychain
+    ohMyVpn["<b>Oh My VPN</b><br/><i>[macOS menu bar app]</i><br/>One-click VPN server<br/>create / connect / destroy"]
 
-    classDef system fill:#438dd5,stroke:#3c7fc0,color:#fff
+    cloudApi["<b>Cloud Provider</b><br/><i>[Hetzner, AWS, GCP]</i><br/>On-demand server infrastructure<br/>with pay-per-hour billing"]
+    keychain["<b>macOS Keychain</b><br/><i>[OS Service]</i><br/>Secure credential storage<br/>with zero plaintext on disk"]
+
+    privacy -->|"Creates ephemeral<br/>VPN server"| ohMyVpn
+    geo -->|"Selects region<br/>and connects"| ohMyVpn
+    cost -->|"Views hourly cost<br/>before connecting"| ohMyVpn
+    dev -->|"Registers API keys<br/>and automates setup"| ohMyVpn
+
+    ohMyVpn -->|"Provisions and destroys<br/>ephemeral servers"| cloudApi
+    ohMyVpn -->|"Stores and retrieves<br/>API keys securely"| keychain
+
     classDef person fill:#08427b,stroke:#073b6f,color:#fff
+    classDef system fill:#438dd5,stroke:#3c7fc0,color:#fff
     classDef external fill:#999,stroke:#888,color:#fff
 
-    class user person
+    class privacy,geo,cost,dev person
     class ohMyVpn system
     class cloudApi,keychain external
 ```
@@ -32,13 +41,23 @@ WireGuard is not an external system -- it is a protocol and library (boringtun) 
 
 ---
 
-## 2. External Actors
+## 2. Stakeholders and Value
 
-| Actor | Type | Interaction | Protocol |
-| --- | --- | --- | --- |
-| User | Person | Manages VPN sessions via menu bar UI | GUI (Tauri webview) |
-| Cloud Provider API | External System | Server CRUD, region/pricing queries (Hetzner, AWS, GCP) | HTTPS REST |
-| macOS Keychain | External System | Credential storage and retrieval | macOS Security Framework |
+| Stakeholder | Core Need | Value Delivered |
+| --- | --- | --- |
+| Privacy-Conscious User | Zero-log VPN with full server ownership | Ephemeral servers destroyed after each session -- no persistent logs anywhere |
+| Geo-Bypass User | Region-specific content access | Pick any region across 3 cloud providers, server ready within 2 minutes |
+| Cost-Sensitive User | Pay-as-you-go pricing | $0.17--$4.63/month vs $5--12/month fixed subscription |
+| Developer | Automated VPN provisioning | One-click replaces manual CLI work across multiple cloud providers |
+
+---
+
+## 3. External Systems
+
+| System | Role | Why External |
+| --- | --- | --- |
+| Cloud Provider (Hetzner, AWS, GCP) | On-demand server infrastructure with per-hour billing | Account management, billing, and IAM are outside Oh My VPN's control |
+| macOS Keychain | OS-level encrypted credential storage | Encryption and access control delegated to macOS Security Framework |
 
 ---
 
