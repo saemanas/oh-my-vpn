@@ -37,13 +37,31 @@ flowchart TD
     result -->|Yes| done[Complete]
     result -->|No| classify{Error Type?}
 
-    classify -->|Transient| retry{Retries Left?}
-    retry -->|Yes| backoff[Exponential Backoff] --> op
-    retry -->|No| cleanup[Auto-Cleanup] --> notify[Notify User]
+    subgraph transient["Transient Error"]
+        direction TB
+        t1[Retry up to 3x<br/>with exponential backoff]
+        t2{All retries<br/>exhausted?}
+        t1 --> t2
+        t2 -->|No| t3[Retry operation]
+        t2 -->|Yes| t4[Auto-cleanup<br/>+ notify user]
+    end
 
-    classify -->|Permanent| cleanup
+    subgraph permanent["Permanent Error"]
+        direction TB
+        p1[No retry]
+        p1 --> p2[Auto-cleanup<br/>+ notify user<br/>with specific error]
+    end
 
-    classify -->|Rate Limited| rateLimited[Backoff + Notify] --> op
+    subgraph rateLimited["Rate Limited"]
+        direction TB
+        r1[Backoff with<br/>provider wait time]
+        r1 --> r2[Notify user of delay]
+        r2 --> r3[Retry operation]
+    end
+
+    classify -->|Transient| t1
+    classify -->|Permanent| p1
+    classify -->|Rate Limited| r1
 ```
 
 ### A. Transient Errors
