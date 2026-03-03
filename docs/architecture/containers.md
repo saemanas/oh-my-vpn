@@ -60,7 +60,7 @@ The Rust Backend is a single process with the following internal modules. These 
 
 ```mermaid
 flowchart TD
-    ipc["<b>IPC Layer</b><br/>Tauri command whitelist"]
+    ipc["<b>Tauri IPC</b><br/>Command whitelist"]
     providerManager["<b>Provider Manager</b><br/>Cloud API abstraction"]
     serverLifecycle["<b>Server Lifecycle</b><br/>Provisioning and destruction"]
     vpnManager["<b>VPN Manager</b><br/>WireGuard tunnel"]
@@ -71,13 +71,15 @@ flowchart TD
     ipc --> vpnManager
     ipc --> sessionTracker
     serverLifecycle --> providerManager
+    serverLifecycle --> vpnManager
+    sessionTracker --> providerManager
     providerManager --> keychainAdapter
 
     classDef module fill:#438dd5,stroke:#3c7fc0,color:#fff
     class ipc,providerManager,serverLifecycle,vpnManager,sessionTracker,keychainAdapter module
 ```
 
-### A. IPC Layer
+### A. Tauri IPC
 
 Tauri command whitelist. Routes frontend requests to the appropriate backend module. Only explicitly allowed commands pass through (NFR-SEC-7).
 
@@ -87,7 +89,7 @@ Unified interface over Hetzner, AWS, and GCP APIs. Each cloud provider implement
 
 ### C. Server Lifecycle
 
-Orchestrates server provisioning (cloud-init with WireGuard + firewall), destruction on disconnect, auto-cleanup on failure, orphaned server detection on app launch.
+Orchestrates server provisioning (cloud-init with WireGuard + firewall), destruction on disconnect, auto-cleanup on failure, orphaned server detection on app launch. The disconnect-to-destruction flow (tunnel teardown + server deletion via provider API) must complete within 30 seconds (NFR-PERF-2).
 
 ### D. VPN Manager
 
@@ -115,7 +117,6 @@ Encapsulates all macOS Keychain interactions via Security Framework. Single poin
 
 ## 5. Key Design Decisions
 
-- **Provider abstraction via trait**: Each cloud provider implements a common Rust trait, enabling independent replacement (Risk R-5) and sequential development (Risk R-7: Hetzner first, then AWS, GCP)
-- **Tauri IPC whitelist**: Only explicitly allowed commands pass through the IPC bridge, minimizing attack surface (NFR-SEC-7)
-- **Ephemeral credentials**: WireGuard keys are generated per session and deleted after teardown -- never persisted (NFR-SEC-2)
-- **Keychain as single credential store**: Zero plaintext keys on disk (NFR-SEC-1)
+- **Single binary, no microservices**: All backend modules run in one Tauri process. Simplifies distribution, eliminates IPC latency between modules, and matches the single-user desktop app model
+- **Server Lifecycle as orchestrator**: Server Lifecycle coordinates both Provider Manager (cloud API) and VPN Manager (tunnel), keeping the connect/disconnect flow in one place rather than spreading it across IPC handlers
+- **Session Tracker queries providers directly**: Orphaned server detection on app launch requires querying all registered providers' server lists (FR-SL-6), so Session Tracker depends on Provider Manager rather than going through Server Lifecycle
