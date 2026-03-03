@@ -12,23 +12,20 @@ This document defines the system boundary -- what Oh My VPN is, who interacts wi
 C4Context
     title Oh My VPN -- System Context
 
-    Person(user, "User", "Privacy-conscious individual,<br/>geo-bypass user, developer,<br/>or cost-sensitive user")
+    Person(user, "User", "Creates, connects to, and<br/>destroys VPN servers")
+    System(ohMyVpn, "Oh My VPN", "macOS menu bar app.<br/>Provisions on-demand servers<br/>and establishes WireGuard tunnels")
 
-    System(ohMyVpn, "Oh My VPN", "macOS menu bar app that provisions<br/>and manages on-demand WireGuard<br/>VPN servers across cloud providers")
+    System_Ext(cloudApi, "Cloud Provider API", "Hetzner, AWS, GCP.<br/>Server provisioning and destruction")
+    System_Ext(keychain, "macOS Keychain", "Encrypted storage<br/>for API keys")
 
-    System_Ext(hetzner, "Hetzner Cloud API", "Provisions and destroys<br/>cloud servers in Hetzner")
-    System_Ext(aws, "AWS EC2 API", "Provisions and destroys<br/>cloud servers in AWS")
-    System_Ext(gcp, "GCP Compute Engine API", "Provisions and destroys<br/>cloud servers in GCP")
-    System_Ext(keychain, "macOS Keychain", "Securely stores API keys<br/>and sensitive credentials")
-    System_Ext(wireguard, "WireGuard", "Establishes encrypted VPN<br/>tunnel to provisioned server")
+    Rel(user, ohMyVpn, "Uses", "GUI")
+    Rel(ohMyVpn, cloudApi, "Provisions/destroys servers", "HTTPS")
+    Rel(ohMyVpn, keychain, "Stores/retrieves API keys")
 
-    Rel(user, ohMyVpn, "Creates/connects/destroys VPN", "GUI")
-    Rel(ohMyVpn, hetzner, "Provisions/destroys servers,<br/>fetches regions and pricing", "HTTPS")
-    Rel(ohMyVpn, aws, "Provisions/destroys servers,<br/>fetches regions and pricing", "HTTPS")
-    Rel(ohMyVpn, gcp, "Provisions/destroys servers,<br/>fetches regions and pricing", "HTTPS")
-    Rel(ohMyVpn, keychain, "Stores/retrieves API keys", "Security Framework")
-    Rel(ohMyVpn, wireguard, "Manages VPN tunnel<br/>lifecycle", "Userspace/CLI")
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
 ```
+
+WireGuard is not an external system -- it is a protocol and library (boringtun) bundled inside the application. The individual cloud providers (Hetzner, AWS, GCP) are abstracted as a single external system at the context level; their differences are visible at the container level in [containers.md](containers.md).
 
 ---
 
@@ -37,11 +34,8 @@ C4Context
 | Actor | Type | Interaction | Protocol |
 | --- | --- | --- | --- |
 | User | Person | Manages VPN sessions via menu bar UI | GUI (Tauri webview) |
-| Hetzner Cloud API | External System | Server CRUD, region/pricing queries | HTTPS REST |
-| AWS EC2 API | External System | Server CRUD, region/pricing queries | HTTPS REST |
-| GCP Compute Engine API | External System | Server CRUD, region/pricing queries | HTTPS REST |
+| Cloud Provider API | External System | Server CRUD, region/pricing queries (Hetzner, AWS, GCP) | HTTPS REST |
 | macOS Keychain | External System | Credential storage and retrieval | macOS Security Framework |
-| WireGuard | External System | VPN tunnel establishment and teardown | Userspace (boringtun) or system CLI |
 
 ---
 
@@ -51,14 +45,13 @@ C4Context
 
 - Tauri application (TypeScript frontend + Rust backend)
 - Provider abstraction layer (unified interface for Hetzner, AWS, GCP)
-- WireGuard key generation and tunnel management
+- WireGuard integration (key generation, tunnel management via boringtun)
 - Session state tracking (connected IP, elapsed time, cost)
 - Orphaned server detection and recovery
 
 ### B. Outside the System
 
 - Cloud provider account management (sign-up, billing, IAM)
-- WireGuard protocol implementation (leveraged, not built)
 - macOS Keychain encryption (delegated to OS)
 - Network Extension entitlement (open question OQ-3 from PRD)
 
