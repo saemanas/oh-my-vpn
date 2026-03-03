@@ -23,7 +23,10 @@
 
 ### C. ADR
 
-<!-- Format: - [ADR-NNNN: {title}]({relative_path}) -->
+- [ADR-0001: Use wireguard-go with wg-quick](docs/adr/0001-use-wireguard-go-with-wg-quick.md)
+- [ADR-0002: Use Rust SDK for cloud providers](docs/adr/0002-use-rust-sdk-for-cloud-providers.md)
+- [ADR-0003: No Network Extension for MVP](docs/adr/0003-no-network-extension-for-mvp.md)
+- [ADR-0004: Ephemeral SSH keys per session](docs/adr/0004-ephemeral-ssh-keys-per-session.md)
 
 ### D. Reference
 

@@ -37,7 +37,7 @@ flowchart TD
     class cloudApi,keychain external
 ```
 
-WireGuard is not an external system -- it is a protocol integrated inside the application (likely via boringtun userspace implementation, pending OQ-1 decision). The individual cloud providers (Hetzner, AWS, GCP) are abstracted as a single external system at the context level; their differences are visible at the container level in [containers.md](containers.md).
+WireGuard is not an external system -- it is a protocol integrated inside the application via `wireguard-go` and `wg-quick` bundled in the app ([ADR-0001](../adr/0001-use-wireguard-go-with-wg-quick.md)). The individual cloud providers (Hetzner, AWS, GCP) are abstracted as a single external system at the context level; their differences are visible at the container level in [containers.md](containers.md).
 
 ---
 
@@ -67,7 +67,7 @@ WireGuard is not an external system -- it is a protocol integrated inside the ap
 
 - Tauri application (TypeScript frontend + Rust backend)
 - Provider abstraction layer (unified interface for Hetzner, AWS, GCP)
-- WireGuard integration (key generation, tunnel management -- implementation pending OQ-1)
+- WireGuard integration (key generation, tunnel management via wg-quick -- [ADR-0001](../adr/0001-use-wireguard-go-with-wg-quick.md))
 - Session state tracking (connected IP, elapsed time, cost)
 - Orphaned server detection and recovery
 
@@ -75,17 +75,17 @@ WireGuard is not an external system -- it is a protocol integrated inside the ap
 
 - Cloud provider account management (sign-up, billing, IAM)
 - macOS Keychain encryption (delegated to OS)
-- Network Extension entitlement (open question OQ-3 from PRD)
+- Network Extension entitlement (not required for MVP -- [ADR-0003](../adr/0003-no-network-extension-for-mvp.md))
 
 ---
 
-## 5. Open Decisions
+## 5. Resolved Decisions
 
-These items from the PRD affect the system boundary and require ADRs:
+All architectural open questions from the PRD have been resolved via ADRs:
 
-| PRD Ref | Question | Impact |
+| PRD Ref | Decision | ADR |
 | --- | --- | --- |
-| OQ-1 | WireGuard via boringtun (userspace) or system client? | Determines WireGuard dependency type |
-| OQ-2 | Direct HTTP API calls or CLI tool wrapping (hcloud, aws, gcloud)? | Determines cloud provider integration pattern |
-| OQ-3 | Is macOS Network Extension entitlement required? | May add Apple Developer Program as external dependency |
-| OQ-7 | Ephemeral SSH key strategy for provisioning? | Affects key management boundary |
+| OQ-1 | Use wireguard-go + wg-quick (bundled) | [ADR-0001](../adr/0001-use-wireguard-go-with-wg-quick.md) |
+| OQ-2 | Use Rust SDK per provider | [ADR-0002](../adr/0002-use-rust-sdk-for-cloud-providers.md) |
+| OQ-3 | No Network Extension for MVP | [ADR-0003](../adr/0003-no-network-extension-for-mvp.md) |
+| OQ-7 | Ephemeral SSH keys per session | [ADR-0004](../adr/0004-ephemeral-ssh-keys-per-session.md) |

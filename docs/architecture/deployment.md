@@ -48,7 +48,7 @@ C4Deployment
 | Runtime | Tauri app bundle (.app) |
 | Distribution | Direct download (v1.0), `brew install` (v2.0) |
 | Update mechanism | Tauri built-in updater (OQ-6) or manual download |
-| Privileges | Standard user; may require admin for WireGuard tunnel (OQ-3) |
+| Privileges | Admin (sudo) required for wg-quick tunnel creation ([ADR-0001](../adr/0001-use-wireguard-go-with-wg-quick.md), [ADR-0003](../adr/0003-no-network-extension-for-mvp.md)) |
 
 The entire Tauri application runs as a single process on the user's machine. All Rust containers are in-process modules -- not separate services.
 
