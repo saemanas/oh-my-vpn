@@ -8,10 +8,19 @@
 2. Update diagrams and prose to reflect the change
 3. Write a new ADR if the change involves a significant decision
 
+**Phase tags** control which documents agents load per task context:
+
+| Phase | When to load | When to skip |
+| --- | --- | --- |
+| `ideation` | Brainstorming, product discovery | Planning, implementation |
+| `plan/execution` | Planning, implementation | Ideation (already internalized in later docs) |
+
+Default phase (no tag) is `plan/execution`.
+
 ### A. Product
 
-- [brainstorming](docs/brainstorming/2026-03-03-0433-brainstorming.md)
-- [product-brief](docs/product-brief/2026-03-03-0537-product-brief.md)
+- [brainstorming](docs/brainstorming/2026-03-03-0433-brainstorming.md) <!-- phase: ideation -->
+- [product-brief](docs/product-brief/2026-03-03-0537-product-brief.md) <!-- phase: ideation -->
 - [prd](docs/prd/2026-03-03-0537-prd.md)
 
 ### B. UX Design
