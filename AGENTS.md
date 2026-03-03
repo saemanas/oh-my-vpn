@@ -18,15 +18,19 @@
 
 - [ux-design](docs/ux-design/2026-03-03-1619-ux-design.md)
 
-### C. Architecture
+### C. UI Design
+
+<!-- Format: - [{title}]({relative_path}) -->
+
+### D. Architecture
 
 <!-- Format: - [{file_name}]({relative_path}) -->
 
-### D. ADR
+### E. ADR
 
 <!-- Format: - [ADR-NNNN: {title}]({relative_path}) -->
 
-### E. Reference
+### F. Reference
 
 <!-- Format: - [{file_name}]({relative_path}) -->
 
