@@ -91,7 +91,7 @@ Orchestrates server provisioning (cloud-init with WireGuard + firewall), destruc
 
 ### D. VPN Manager
 
-Generates ephemeral WireGuard key pairs, establishes/tears down VPN tunnel via boringtun, configures DNS routing to prevent leaks, handles IPv6 leak prevention. Keys are deleted after session (NFR-SEC-2).
+Generates ephemeral WireGuard key pairs, establishes/tears down VPN tunnel (likely via boringtun userspace implementation, pending OQ-1 decision), configures DNS routing to prevent leaks, handles IPv6 leak prevention. Keys are deleted after session (NFR-SEC-2).
 
 ### E. Session Tracker
 

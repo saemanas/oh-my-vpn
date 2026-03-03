@@ -37,7 +37,7 @@ flowchart TD
     class cloudApi,keychain external
 ```
 
-WireGuard is not an external system -- it is a protocol and library (boringtun) bundled inside the application. The individual cloud providers (Hetzner, AWS, GCP) are abstracted as a single external system at the context level; their differences are visible at the container level in [containers.md](containers.md).
+WireGuard is not an external system -- it is a protocol integrated inside the application (likely via boringtun userspace implementation, pending OQ-1 decision). The individual cloud providers (Hetzner, AWS, GCP) are abstracted as a single external system at the context level; their differences are visible at the container level in [containers.md](containers.md).
 
 ---
 
@@ -61,13 +61,13 @@ WireGuard is not an external system -- it is a protocol and library (boringtun) 
 
 ---
 
-## 3. Key Boundaries
+## 4. Key Boundaries
 
 ### A. Inside the System
 
 - Tauri application (TypeScript frontend + Rust backend)
 - Provider abstraction layer (unified interface for Hetzner, AWS, GCP)
-- WireGuard integration (key generation, tunnel management via boringtun)
+- WireGuard integration (key generation, tunnel management -- implementation pending OQ-1)
 - Session state tracking (connected IP, elapsed time, cost)
 - Orphaned server detection and recovery
 
@@ -79,7 +79,7 @@ WireGuard is not an external system -- it is a protocol and library (boringtun) 
 
 ---
 
-## 4. Open Decisions
+## 5. Open Decisions
 
 These items from the PRD affect the system boundary and require ADRs:
 
