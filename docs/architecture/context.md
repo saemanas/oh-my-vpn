@@ -88,4 +88,7 @@ All architectural open questions from the PRD have been resolved via ADRs:
 | OQ-1 | Use wireguard-go + wg-quick (bundled) | [ADR-0001](../adr/0001-use-wireguard-go-with-wg-quick.md) |
 | OQ-2 | Use Rust SDK per provider | [ADR-0002](../adr/0002-use-rust-sdk-for-cloud-providers.md) |
 | OQ-3 | No Network Extension for MVP | [ADR-0003](../adr/0003-no-network-extension-for-mvp.md) |
+| OQ-4 | Use provider Pricing API for real-time cost data | [ADR-0005](../adr/0005-use-provider-pricing-api.md) |
+| OQ-5 | Support all three providers in MVP | [ADR-0006](../adr/0006-all-providers-in-mvp.md) |
+| OQ-6 | Tauri updater with GitHub Releases fallback | [ADR-0007](../adr/0007-tauri-updater-with-github-releases.md) |
 | OQ-7 | Ephemeral SSH keys per session | [ADR-0004](../adr/0004-ephemeral-ssh-keys-per-session.md) |

@@ -22,7 +22,7 @@ flowchart LR
 ### A. Rules
 
 - API keys are **never** stored in files, environment variables, or application memory beyond the immediate operation (NFR-SEC-1)
-- WireGuard keys are **ephemeral** -- generated per session, held in memory during the session, deleted on teardown (NFR-SEC-2)
+- WireGuard keys are **ephemeral** -- generated per session, held in memory during the session, deleted on teardown (NFR-SEC-2). SSH keys follow the same ephemeral pattern ([ADR-0004](../adr/0004-ephemeral-ssh-keys-per-session.md))
 - WireGuard config files have permission `600` and are deleted immediately after tunnel establishment (NFR-SEC-6)
 
 ---
@@ -108,7 +108,7 @@ flowchart TD
 
 ### A. Detection Strategy
 
-On every app launch, the Session Tracker checks for persisted server state (server ID, provider, region). If state exists, the Provider Manager queries the cloud API to verify the server still exists. This ensures 100% detection rate (NFR-REL-1).
+On every app launch, the Session Tracker checks for persisted server state (server ID, provider, region). If state exists, the Provider Manager queries the cloud API to verify the server still exists. This ensures 100% detection rate (NFR-REL-1). Detection runs **asynchronously** after the menu bar is ready -- the app must reach the ready state within 3 seconds (NFR-PERF-3), so orphan detection must not block startup.
 
 ### B. State Persistence
 
@@ -160,7 +160,7 @@ Status changes are communicated via macOS native notifications (FR-MN-2). This i
 
 ## 6. Cloud-Init Strategy
 
-Server provisioning uses cloud-init to automate WireGuard installation and configuration. This is a cross-cutting concern because it involves the Server Lifecycle, VPN Manager, and Provider Manager.
+Server provisioning uses cloud-init to automate WireGuard installation and configuration ([ADR-0001](../adr/0001-use-wireguard-go-with-wg-quick.md)). This is a cross-cutting concern because it involves the Server Lifecycle, VPN Manager, and Provider Manager.
 
 ### A. cloud-init Script Responsibilities
 
@@ -181,3 +181,26 @@ Each cloud provider may require slightly different cloud-init scripts (Risk R-1)
 | GCP | Startup script metadata, firewall rules via Compute Engine API |
 
 Provider-specific scripts are maintained independently and tested per provider (Risk R-1 mitigation).
+
+---
+
+## 7. Update Integrity
+
+App updates are distributed via Tauri's built-in updater with GitHub Releases as a manual fallback ([ADR-0007](../adr/0007-tauri-updater-with-github-releases.md)). Update integrity is a cross-cutting security concern -- a compromised update binary could undermine all other security properties (credential storage, ephemeral keys, tunnel isolation).
+
+### A. Signature Verification
+
+Every update binary is signed with an Ed25519 key pair. The Tauri updater verifies the signature before applying the update:
+
+| Component | Location | Purpose |
+| --- | --- | --- |
+| Signing private key | CI environment secret (never on disk) | Signs update binaries during release build |
+| Verification public key | Embedded in app binary (`tauri.conf.json`) | Verifies downloaded update before installation |
+
+### B. Failure Handling
+
+| Failure | Behavior |
+| --- | --- |
+| Signature verification fails | Update rejected, user notified, manual download fallback offered |
+| Download interrupted | Retry up to 3 times, then notify user to download from GitHub Releases |
+| Update endpoint unreachable | Silent skip, app continues with current version |
