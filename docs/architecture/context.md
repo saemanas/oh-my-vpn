@@ -9,20 +9,23 @@ This document defines the system boundary -- what Oh My VPN is, who interacts wi
 ## 1. System Context
 
 ```mermaid
-C4Context
-    title Oh My VPN -- System Context
+flowchart TD
+    user["👤 <b>User</b><br/>Creates, connects to, and<br/>destroys VPN servers"]
+    ohMyVpn["<b>Oh My VPN</b><br/><i>[macOS menu bar app]</i><br/>Provisions on-demand servers<br/>and establishes WireGuard tunnels"]
+    cloudApi["<b>Cloud Provider API</b><br/><i>[External]</i><br/>Hetzner, AWS, GCP"]
+    keychain["<b>macOS Keychain</b><br/><i>[External]</i><br/>Credential storage"]
 
-    Person(user, "User", "Creates, connects to, and<br/>destroys VPN servers")
-    System(ohMyVpn, "Oh My VPN", "macOS menu bar app.<br/>Provisions on-demand servers<br/>and establishes WireGuard tunnels")
+    user -->|"GUI"| ohMyVpn
+    ohMyVpn -->|"HTTPS"| cloudApi
+    ohMyVpn -->|"Security Framework"| keychain
 
-    System_Ext(cloudApi, "Cloud Provider API", "Hetzner, AWS, GCP.<br/>Server provisioning and destruction")
-    System_Ext(keychain, "macOS Keychain", "Encrypted storage<br/>for API keys")
+    classDef system fill:#438dd5,stroke:#3c7fc0,color:#fff
+    classDef person fill:#08427b,stroke:#073b6f,color:#fff
+    classDef external fill:#999,stroke:#888,color:#fff
 
-    Rel(user, ohMyVpn, "Uses", "GUI")
-    Rel(ohMyVpn, cloudApi, "Provisions/destroys servers", "HTTPS")
-    Rel(ohMyVpn, keychain, "Stores/retrieves API keys")
-
-    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
+    class user person
+    class ohMyVpn system
+    class cloudApi,keychain external
 ```
 
 WireGuard is not an external system -- it is a protocol and library (boringtun) bundled inside the application. The individual cloud providers (Hetzner, AWS, GCP) are abstracted as a single external system at the context level; their differences are visible at the container level in [containers.md](containers.md).

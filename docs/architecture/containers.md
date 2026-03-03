@@ -1,52 +1,35 @@
 # Building Blocks (Container View)
 
-Oh My VPN is a Tauri desktop application with a TypeScript frontend and Rust backend. This document decomposes the system into its major containers -- the applications, services, and data stores that make up Oh My VPN.
+Oh My VPN is a Tauri desktop application with a TypeScript frontend and Rust backend. This document decomposes the system into its two major containers and describes the internal modules within the backend.
 
 ---
 
 ## 1. Container Diagram
 
 ```mermaid
-C4Container
-    title Oh My VPN -- Container Diagram
+flowchart TD
+    user["👤 <b>User</b><br/>Manages VPN sessions"]
 
-    Person(user, "User", "Manages VPN sessions<br/>via menu bar")
+    subgraph ohMyVpn["Oh My VPN"]
+        frontend["<b>Menu Bar UI</b><br/><i>[TypeScript, Webview]</i><br/>Provider/region selection,<br/>session status, onboarding"]
+        backend["<b>Rust Backend</b><br/><i>[Rust, Tauri]</i><br/>Server lifecycle, VPN tunnel,<br/>provider abstraction,<br/>session tracking"]
+    end
 
-    System_Boundary(ohMyVpn, "Oh My VPN") {
-        Container(menuBarUi, "Menu Bar UI", "TypeScript, Tauri Webview", "Menu bar interface for<br/>provider selection, region<br/>picking, and session status")
+    cloudApi["<b>Cloud Provider API</b><br/><i>[External]</i><br/>Hetzner, AWS, GCP"]
+    keychain["<b>macOS Keychain</b><br/><i>[External]</i><br/>Credential storage"]
 
-        Container(tauriCore, "Tauri Core", "Rust", "IPC bridge between frontend<br/>and backend; enforces<br/>command whitelist")
+    user -->|"GUI"| frontend
+    frontend -->|"Tauri IPC"| backend
+    backend -->|"HTTPS"| cloudApi
+    backend -->|"Security Framework"| keychain
 
-        Container(providerManager, "Provider Manager", "Rust", "Unified abstraction over<br/>Hetzner, AWS, GCP APIs;<br/>handles CRUD and pricing")
+    classDef person fill:#08427b,stroke:#073b6f,color:#fff
+    classDef container fill:#438dd5,stroke:#3c7fc0,color:#fff
+    classDef external fill:#999,stroke:#888,color:#fff
 
-        Container(serverLifecycle, "Server Lifecycle", "Rust", "Provisions servers via<br/>cloud-init, manages<br/>destruction and cleanup")
-
-        Container(vpnManager, "VPN Manager", "Rust", "Generates WireGuard keys,<br/>establishes/tears down<br/>tunnels, prevents leaks")
-
-        Container(sessionTracker, "Session Tracker", "Rust", "Tracks connected IP,<br/>elapsed time, running cost,<br/>orphaned server state")
-
-        Container(keychainAdapter, "Keychain Adapter", "Rust", "Reads/writes API keys<br/>to macOS Keychain via<br/>Security Framework")
-    }
-
-    System_Ext(hetzner, "Hetzner Cloud API", "Server provisioning")
-    System_Ext(aws, "AWS EC2 API", "Server provisioning")
-    System_Ext(gcp, "GCP Compute Engine API", "Server provisioning")
-    System_Ext(keychain, "macOS Keychain", "Credential storage")
-    System_Ext(wireguard, "WireGuard", "VPN tunnel")
-
-    Rel(user, menuBarUi, "Interacts", "GUI")
-    Rel(menuBarUi, tauriCore, "Invokes commands", "Tauri IPC")
-    Rel(tauriCore, providerManager, "Delegates provider ops", "Rust calls")
-    Rel(tauriCore, serverLifecycle, "Delegates server ops", "Rust calls")
-    Rel(tauriCore, vpnManager, "Delegates VPN ops", "Rust calls")
-    Rel(tauriCore, sessionTracker, "Delegates session queries", "Rust calls")
-    Rel(providerManager, keychainAdapter, "Retrieves API keys", "Rust calls")
-    Rel(providerManager, hetzner, "Provisions/destroys", "HTTPS")
-    Rel(providerManager, aws, "Provisions/destroys", "HTTPS")
-    Rel(providerManager, gcp, "Provisions/destroys", "HTTPS")
-    Rel(serverLifecycle, providerManager, "Uses provider abstraction", "Rust calls")
-    Rel(vpnManager, wireguard, "Manages tunnel", "Userspace/CLI")
-    Rel(keychainAdapter, keychain, "Stores/retrieves keys", "Security Framework")
+    class user person
+    class frontend,backend container
+    class cloudApi,keychain external
 ```
 
 ---
@@ -61,72 +44,76 @@ C4Container
 | Responsibility | Render menu bar icon with status (disconnected/connecting/connected), onboarding flow, provider/region selection, session panel (IP, elapsed time, cost) |
 | PRD Coverage | FR-MN-1, FR-MN-3, FR-OB-1/2/3, FR-RC-1/2/3/4, FR-SS-1/2/3 |
 
-### B. Tauri Core
+### B. Rust Backend
 
 | Attribute | Value |
 | --- | --- |
 | Technology | Rust (Tauri framework) |
-| Responsibility | IPC bridge between frontend and backend. Whitelists allowed commands per NFR-SEC-7. Routes frontend requests to the appropriate backend container |
-| PRD Coverage | NFR-SEC-7 |
-
-### C. Provider Manager
-
-| Attribute | Value |
-| --- | --- |
-| Technology | Rust |
-| Responsibility | Unified interface over Hetzner, AWS, and GCP APIs. Handles API key validation (FR-PM-2), region listing with pricing (FR-RC-1/2), and delegates credential storage to Keychain Adapter |
-| PRD Coverage | FR-PM-1/2/3/4/5, FR-RC-1/2, NFR-INT-1/2/3 |
-| Design Note | Provider-specific implementations behind a common trait (Dependency Inversion -- SYSTEM.md Principle 2) |
-
-### D. Server Lifecycle
-
-| Attribute | Value |
-| --- | --- |
-| Technology | Rust |
-| Responsibility | Orchestrates server provisioning (cloud-init with WireGuard + firewall), destruction on disconnect, auto-cleanup on failure, orphaned server detection on app launch |
-| PRD Coverage | FR-SL-1/2/3/4/5/6/7, NFR-PERF-1/2, NFR-REL-1/2/3 |
-
-### E. VPN Manager
-
-| Attribute | Value |
-| --- | --- |
-| Technology | Rust |
-| Responsibility | Generates ephemeral WireGuard key pairs, establishes/tears down VPN tunnel, configures DNS routing to prevent leaks, handles IPv6 leak prevention, deletes keys after session |
-| PRD Coverage | FR-VC-1/2/3/4/5/6, NFR-SEC-2/3/4/5/6 |
-| Open Decision | OQ-1 -- boringtun (userspace) vs system WireGuard client |
-
-### F. Session Tracker
-
-| Attribute | Value |
-| --- | --- |
-| Technology | Rust |
-| Responsibility | Maintains current session state -- connected server IP, elapsed time, running cost calculation. Persists minimal state for orphaned server detection across app restarts |
-| PRD Coverage | FR-SS-1/2/3, NFR-REL-4 |
-
-### G. Keychain Adapter
-
-| Attribute | Value |
-| --- | --- |
-| Technology | Rust (macOS Security Framework bindings) |
-| Responsibility | Encapsulates all macOS Keychain interactions. Stores and retrieves API keys with encryption. Single point of credential access |
-| PRD Coverage | FR-PM-3, NFR-SEC-1 |
+| Responsibility | All backend logic -- server lifecycle, VPN tunnel management, provider abstraction, session tracking, credential access. Exposed to the frontend via whitelisted Tauri IPC commands (NFR-SEC-7) |
+| PRD Coverage | All FR-PM, FR-SL, FR-VC, FR-SS, and all NFR requirements |
 
 ---
 
-## 3. Communication Patterns
+## 3. Backend Internal Modules
 
-| From | To | Pattern | Protocol | Notes |
-| --- | --- | --- | --- | --- |
-| Menu Bar UI | Tauri Core | Request/Response | Tauri IPC (JSON) | Whitelisted commands only |
-| Tauri Core | Backend containers | Direct function call | Rust | In-process, no network |
-| Provider Manager | Cloud APIs | Request/Response | HTTPS REST | With retry and backoff (NFR-INT-3) |
-| Provider Manager | Keychain Adapter | Direct function call | Rust | Credential retrieval before API calls |
-| VPN Manager | WireGuard | Process control | Userspace/CLI | Tunnel lifecycle management |
-| Keychain Adapter | macOS Keychain | Request/Response | Security Framework | OS-level encrypted storage |
+The Rust Backend is a single process with the following internal modules. These are not separately deployable -- they are Rust modules within the same binary.
+
+```mermaid
+flowchart TD
+    ipc["<b>IPC Layer</b><br/>Tauri command whitelist"]
+    providerManager["<b>Provider Manager</b><br/>Cloud API abstraction"]
+    serverLifecycle["<b>Server Lifecycle</b><br/>Provisioning and destruction"]
+    vpnManager["<b>VPN Manager</b><br/>WireGuard tunnel"]
+    sessionTracker["<b>Session Tracker</b><br/>IP, time, cost, orphan detection"]
+    keychainAdapter["<b>Keychain Adapter</b><br/>macOS Security Framework"]
+
+    ipc --> serverLifecycle
+    ipc --> vpnManager
+    ipc --> sessionTracker
+    serverLifecycle --> providerManager
+    providerManager --> keychainAdapter
+
+    classDef module fill:#438dd5,stroke:#3c7fc0,color:#fff
+    class ipc,providerManager,serverLifecycle,vpnManager,sessionTracker,keychainAdapter module
+```
+
+### A. IPC Layer
+
+Tauri command whitelist. Routes frontend requests to the appropriate backend module. Only explicitly allowed commands pass through (NFR-SEC-7).
+
+### B. Provider Manager
+
+Unified interface over Hetzner, AWS, and GCP APIs. Each cloud provider implements a common Rust trait, enabling independent replacement (Risk R-5) and sequential development (Risk R-7: Hetzner first, then AWS, GCP). Handles API key validation (FR-PM-2), region listing with pricing (FR-RC-1/2).
+
+### C. Server Lifecycle
+
+Orchestrates server provisioning (cloud-init with WireGuard + firewall), destruction on disconnect, auto-cleanup on failure, orphaned server detection on app launch.
+
+### D. VPN Manager
+
+Generates ephemeral WireGuard key pairs, establishes/tears down VPN tunnel via boringtun, configures DNS routing to prevent leaks, handles IPv6 leak prevention. Keys are deleted after session (NFR-SEC-2).
+
+### E. Session Tracker
+
+Maintains current session state -- connected server IP, elapsed time, running cost calculation. Persists minimal state for orphaned server detection across app restarts (NFR-REL-1).
+
+### F. Keychain Adapter
+
+Encapsulates all macOS Keychain interactions via Security Framework. Single point of credential access -- zero plaintext keys on disk (NFR-SEC-1).
 
 ---
 
-## 4. Key Design Decisions
+## 4. Communication Patterns
+
+| From | To | Pattern | Protocol |
+| --- | --- | --- | --- |
+| Menu Bar UI | Rust Backend | Request/Response | Tauri IPC (JSON) |
+| Rust Backend | Cloud Provider API | Request/Response | HTTPS REST (with retry and backoff) |
+| Rust Backend | macOS Keychain | Request/Response | macOS Security Framework |
+
+---
+
+## 5. Key Design Decisions
 
 - **Provider abstraction via trait**: Each cloud provider implements a common Rust trait, enabling independent replacement (Risk R-5) and sequential development (Risk R-7: Hetzner first, then AWS, GCP)
 - **Tauri IPC whitelist**: Only explicitly allowed commands pass through the IPC bridge, minimizing attack surface (NFR-SEC-7)
