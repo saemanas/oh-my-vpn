@@ -29,6 +29,7 @@
 - [containers.md](docs/architecture/containers.md)
 - [deployment.md](docs/architecture/deployment.md)
 - [cross-cutting-concepts.md](docs/architecture/cross-cutting-concepts.md)
+- [quality-attributes.md](docs/architecture/quality-attributes.md)
 
 ### E. ADR
 
@@ -39,6 +40,7 @@
 - [ADR-0005: Use Provider Pricing API](docs/adr/0005-use-provider-pricing-api.md)
 - [ADR-0006: All Providers in MVP](docs/adr/0006-all-providers-in-mvp.md)
 - [ADR-0007: Tauri Updater with GitHub Releases](docs/adr/0007-tauri-updater-with-github-releases.md)
+- [ADR-0008: Quality Attributes and Fitness Functions](docs/adr/0008-quality-attributes-and-fitness-functions.md)
 
 ### F. Reference
 
