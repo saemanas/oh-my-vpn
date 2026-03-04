@@ -18,19 +18,19 @@ const CURRENT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug)]
 pub enum PreferencesError {
-    ReadFailed(String),
-    WriteFailed(String),
-    ParseFailed(String),
-    MigrationFailed(String),
+    Read(String),
+    Write(String),
+    Parse(String),
+    Migration(String),
 }
 
 impl fmt::Display for PreferencesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PreferencesError::ReadFailed(msg) => write!(f, "Preferences read failed: {msg}"),
-            PreferencesError::WriteFailed(msg) => write!(f, "Preferences write failed: {msg}"),
-            PreferencesError::ParseFailed(msg) => write!(f, "Preferences parse failed: {msg}"),
-            PreferencesError::MigrationFailed(msg) => {
+            PreferencesError::Read(msg) => write!(f, "Preferences read failed: {msg}"),
+            PreferencesError::Write(msg) => write!(f, "Preferences write failed: {msg}"),
+            PreferencesError::Parse(msg) => write!(f, "Preferences parse failed: {msg}"),
+            PreferencesError::Migration(msg) => {
                 write!(f, "Preferences migration failed: {msg}")
             }
         }
@@ -80,21 +80,21 @@ impl PreferencesStore {
 
     pub fn save(&self, preferences: &UserPreferences) -> Result<(), PreferencesError> {
         fs::create_dir_all(&self.data_dir).map_err(|e| {
-            PreferencesError::WriteFailed(format!("Failed to create data directory: {e}"))
+            PreferencesError::Write(format!("Failed to create data directory: {e}"))
         })?;
 
         let json = serde_json::to_string_pretty(preferences).map_err(|e| {
-            PreferencesError::WriteFailed(format!("Failed to serialize preferences: {e}"))
+            PreferencesError::Write(format!("Failed to serialize preferences: {e}"))
         })?;
 
         let tmp_path = self.data_dir.join(".preferences.tmp.json");
 
         fs::write(&tmp_path, &json).map_err(|e| {
-            PreferencesError::WriteFailed(format!("Failed to write temp file: {e}"))
+            PreferencesError::Write(format!("Failed to write temp file: {e}"))
         })?;
 
         fs::rename(&tmp_path, self.file_path()).map_err(|e| {
-            PreferencesError::WriteFailed(format!("Failed to atomically rename preferences file: {e}"))
+            PreferencesError::Write(format!("Failed to atomically rename preferences file: {e}"))
         })?;
 
         Ok(())
@@ -110,7 +110,7 @@ impl PreferencesStore {
         }
 
         let content = fs::read_to_string(&file_path).map_err(|e| {
-            PreferencesError::ReadFailed(format!("Failed to read preferences file: {e}"))
+            PreferencesError::Read(format!("Failed to read preferences file: {e}"))
         })?;
 
         match serde_json::from_str::<UserPreferences>(&content) {
@@ -138,22 +138,17 @@ impl PreferencesStore {
     fn migrate(preferences: UserPreferences) -> Result<UserPreferences, PreferencesError> {
         let mut current = preferences;
 
-        // Sequential migration: apply each step in order until we reach current version.
-        // Future migrations: add a new match arm for the next version.
-        loop {
-            match current.schema_version {
-                v if v == CURRENT_SCHEMA_VERSION => return Ok(current),
-                0 => {
-                    return Err(PreferencesError::MigrationFailed(
-                        "No migration path from schema version 0".to_string(),
-                    ));
-                }
-                v => {
-                    return Err(PreferencesError::MigrationFailed(format!(
-                        "Unknown schema version: {v}"
-                    )));
-                }
-            }
+        // Sequential migration: match on the stored version and upgrade step by step.
+        // When adding a new schema version, convert this into a loop that mutates
+        // `current` and re-evaluates until it reaches CURRENT_SCHEMA_VERSION.
+        match current.schema_version {
+            v if v == CURRENT_SCHEMA_VERSION => Ok(current),
+            0 => Err(PreferencesError::Migration(
+                "No migration path from schema version 0".to_string(),
+            )),
+            v => Err(PreferencesError::Migration(format!(
+                "Unknown schema version: {v}"
+            ))),
         }
     }
 }
@@ -275,8 +270,8 @@ mod tests {
         let result = store.load();
 
         assert!(
-            matches!(result, Err(PreferencesError::MigrationFailed(_))),
-            "expected MigrationFailed for schema_version=0, got: {:?}",
+            matches!(result, Err(PreferencesError::Migration(_))),
+            "expected Migration for schema_version=0, got: {:?}",
             result
         );
     }
