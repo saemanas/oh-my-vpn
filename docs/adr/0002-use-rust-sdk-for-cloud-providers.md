@@ -54,7 +54,7 @@ flowchart TD
 
     trait --> hetzner["HetznerProvider<br/><i>hcloud crate</i>"]
     trait --> aws["AwsProvider<br/><i>aws-sdk-ec2</i>"]
-    trait --> gcp["GcpProvider<br/><i>google-cloud-compute</i>"]
+    trait --> gcp["GcpProvider<br/><i>google-cloud-compute-v1</i>"]
 
     hetzner --> hetznerApi["Hetzner Cloud API"]
     aws --> awsApi["AWS EC2 API"]
