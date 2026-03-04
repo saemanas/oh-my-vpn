@@ -1,13 +1,9 @@
-#[allow(unused)]
 mod error;
-#[allow(unused)]
 mod ipc;
 pub mod types;
-#[allow(unused)]
 pub(crate) mod keychain_adapter;
 #[allow(unused)]
 mod preferences_store;
-#[allow(unused)]
 mod provider_manager;
 #[allow(unused)]
 mod server_lifecycle;
@@ -22,11 +18,20 @@ use tauri::{
     Manager,
 };
 
+use provider_manager::{AwsProvider, GcpProvider, HetznerProvider, ProviderRegistry};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Initialize ProviderRegistry with all supported providers.
+            let mut registry = ProviderRegistry::new();
+            registry.register(types::Provider::Hetzner, Box::new(HetznerProvider::new()));
+            registry.register(types::Provider::Aws, Box::new(AwsProvider::new()));
+            registry.register(types::Provider::Gcp, Box::new(GcpProvider::new()));
+            app.manage(tokio::sync::Mutex::new(registry));
+
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit_item])?;
 
