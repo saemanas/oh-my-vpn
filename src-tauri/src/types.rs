@@ -39,6 +39,59 @@ impl Provider {
     }
 }
 
+/// Cloud region with pricing information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegionInfo {
+    /// Cloud region code (e.g., "fsn1", "us-east-1").
+    pub region: String,
+    /// Human-readable name (e.g., "Falkenstein, DE").
+    pub display_name: String,
+    /// Cheapest instance type name.
+    pub instance_type: String,
+    /// USD per hour.
+    pub hourly_cost: f64,
+}
+
+/// Server information returned by cloud provider operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerInfo {
+    /// Provider-side server ID.
+    pub server_id: String,
+    /// Public IP address of the server.
+    pub public_ip: String,
+    /// Current server status.
+    pub status: ServerStatus,
+}
+
+/// Server lifecycle status.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServerStatus {
+    Provisioning,
+    Running,
+    Deleting,
+}
+
+/// Provider registration and validation status.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProviderStatus {
+    Valid,
+    Invalid,
+    Unchecked,
+}
+
+/// Provider information for UI display.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderInfo {
+    /// Which cloud provider.
+    pub provider: Provider,
+    /// Credential validation status.
+    pub status: ProviderStatus,
+    /// Human-readable identifier from Keychain account field.
+    pub account_label: String,
+}
+
 /// Action to take on an orphaned server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
