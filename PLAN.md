@@ -3,9 +3,13 @@ task: "Implement Keychain Adapter module"
 milestone: "M1"
 module: "M1.2"
 created_at: "2026-03-04T19:30:59+07:00"
-status: "pending"
+status: "done"
+completed_at: "2026-03-04T19:30:59+07:00"
 branch: "feature/keychain-adapter"
 ---
+
+> **Status**: Completed at 2026-03-04T19:30:59+07:00
+> **Branch**: feature/keychain-adapter
 
 # PLAN -- M1.2 Keychain Adapter
 
@@ -109,7 +113,7 @@ classDiagram
 
 ### Step 1: Add dependencies to Cargo.toml
 
-- [ ] **Status**: pending
+- [x] **Status**: done
 - **Scope**: `src-tauri/Cargo.toml`
 - **Dependencies**: none
 - **Description**: Add `security-framework` and `core-foundation` crate dependencies.
@@ -120,7 +124,7 @@ classDiagram
 
 ### Step 2: Create shared Provider enum
 
-- [ ] **Status**: pending
+- [x] **Status**: done
 - **Scope**: `src-tauri/src/types.rs`, `src-tauri/src/lib.rs`
 - **Dependencies**: Step 1
 - **Description**: Define the `Provider` enum with `Hetzner`, `Aws`, `Gcp` variants. Include `service_name()` and `from_service_name()` methods. Add Serde derives for future IPC use. Register `mod types` in `lib.rs`.
@@ -133,7 +137,7 @@ classDiagram
 
 ### Step 3: Implement KeychainAdapter + KeychainError
 
-- [ ] **Status**: pending
+- [x] **Status**: done
 - **Scope**: `src-tauri/src/keychain_adapter.rs`
 - **Dependencies**: Step 2
 - **Description**: Implement the 4 methods defined in API design §4.G (MOD-KA). KeychainError enum for error cases. `Credential` struct for retrieve results.
@@ -147,7 +151,7 @@ classDiagram
 
 ### Step 4: Write unit tests
 
-- [ ] **Status**: pending
+- [x] **Status**: done
 - **Scope**: `src-tauri/src/keychain_adapter.rs` (inline `#[cfg(test)]` module)
 - **Dependencies**: Step 3
 - **Description**: Unit tests for the full CRUD round-trip. Tests use a unique service prefix (`oh-my-vpn.test-*`) to avoid colliding with real entries. Tests clean up after themselves.
@@ -162,7 +166,7 @@ classDiagram
 
 ### Step 5: Build and lint verification
 
-- [ ] **Status**: pending
+- [x] **Status**: done
 - **Scope**: full `src-tauri/` crate
 - **Dependencies**: Step 4
 - **Description**: Verify the complete crate compiles and passes clippy. Remove `#[allow(unused)]` from `keychain_adapter` in `lib.rs` (the module is now populated).
