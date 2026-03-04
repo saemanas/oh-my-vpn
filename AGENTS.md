@@ -107,7 +107,54 @@ Every milestone module's acceptance criteria should include automated verificati
 
 ## 3. Project Stack
 
-<!-- No manifest file detected (package.json, Cargo.toml, pyproject.toml, go.mod). -->
-<!-- Update this section when the project stack is determined. -->
+### A. Runtime
+
+| Layer | Technology | Version |
+| --- | --- | --- |
+| Framework | Tauri | 2 |
+| Backend | Rust (edition 2021) | 1.x |
+| Frontend | React + TypeScript | 19 / 5.8 |
+| Bundler | Vite | 7 |
+| Async runtime | Tokio | 1 |
+
+### B. Backend Crates (Cargo.toml)
+
+#### a. Installed
+
+| Crate | Version | Purpose |
+| --- | --- | --- |
+| `tauri` | 2 | App framework (tray-icon feature) |
+| `tauri-plugin-opener` | 2 | URL/file opener plugin |
+| `serde` | 1 (derive) | Serialization |
+| `serde_json` | 1 | JSON parsing |
+| `security-framework` | 3.7 | macOS Keychain access |
+| `core-foundation` | 0.10 | macOS framework bindings |
+
+#### b. Planned (verified compatible)
+
+| Crate | Version | Milestone | Purpose |
+| --- | --- | --- | --- |
+| `tokio` | 1.50 | M2+ | Async runtime |
+| `hcloud` | 0.25 | M2.1 | Hetzner Cloud SDK |
+| `aws-sdk-ec2` | 1.215 | M2.2 | AWS EC2 SDK |
+| `google-cloud-compute-v1` | 2.2 | M2.3 | GCP Compute SDK |
+| `x25519-dalek` | 2.0 | M3.1 | WireGuard key exchange |
+| `ed25519-dalek` | 2.2 | M4.1 | SSH key generation |
+| `zeroize` | 1.8 | M3.1 | Secure memory zeroing |
+| `ssh-key` | 0.6 | M4.1 | SSH key parsing (0.x -- evaluate at M4.1) |
+
+All planned crates were tested together via `cargo check` on 2026-03-04 -- no version conflicts.
+
+### C. Frontend Packages (package.json)
+
+| Package | Version | Purpose |
+| --- | --- | --- |
+| `react` / `react-dom` | ^19.1 | UI library |
+| `@tauri-apps/api` | ^2 | Tauri IPC bridge |
+| `@tauri-apps/plugin-opener` | ^2 | Opener plugin JS bindings |
+| `@vitejs/plugin-react` | ^4.6 | Vite React plugin (v5 major available -- evaluate at M5) |
+| `typescript` | ~5.8 | Type checking (5.9 available -- tilde blocks) |
+| `vite` | ^7.0 | Build tooling |
+| `@tauri-apps/cli` | ^2 | Tauri CLI |
 
 ---
