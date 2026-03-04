@@ -22,11 +22,6 @@
         "decorations": false
       }
     ],
-    "trayIcon": {
-      "id": "main",
-      "iconPath": "icons/icon.png",
-      "menuOnLeftClick": false
-    },
     "security": {
       "csp": null
     }
