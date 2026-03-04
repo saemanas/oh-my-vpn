@@ -65,7 +65,8 @@ Default phase (no tag) is `plan/execution`.
 ### F. Data Model
 
 <!-- scope: entity catalog, ER diagrams, schema definitions, access patterns, migration strategy -->
-<!-- Format: - [{file_name}]({relative_path}) -->
+
+- [2026-03-04-1712-data-model.md](docs/data-model/2026-03-04-1712-data-model.md)
 
 ### G. API Design
 
