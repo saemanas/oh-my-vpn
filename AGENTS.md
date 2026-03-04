@@ -87,7 +87,25 @@ Default phase (no tag) is `plan/execution`.
 
 ---
 
-## 2. Project Stack
+## 2. Verification Strategy
+
+Every milestone module's acceptance criteria should include automated verification where feasible.
+
+| Layer | Tool | Scope | When to run |
+| --- | --- | --- | --- |
+| Unit / Integration | `cargo test` | Rust backend modules | Every module completion |
+| E2E (UI) | `tauri-webdriver` skill | Webview UI flows | After UI modules (M5, M6) |
+| Lint / Type check | `cargo clippy`, `bun run check` | All source code | Every module completion |
+
+**Constraints:**
+
+- `tauri-webdriver` operates on **debug builds only** -- WebDriver server is excluded from release
+- Webview content only -- native system tray and OS menus cannot be automated via WebDriver
+- Rust compilation required before E2E runs -- factor build time into estimates
+
+---
+
+## 3. Project Stack
 
 <!-- No manifest file detected (package.json, Cargo.toml, pyproject.toml, go.mod). -->
 <!-- Update this section when the project stack is determined. -->
