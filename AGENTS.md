@@ -56,7 +56,7 @@ Default phase (no tag) is `plan/execution`.
 
 <!-- Format: - [{file_name}]({relative_path}) -->
 
-### G. Reference
+### G. References
 
 <!-- Format: - [{file_name}]({relative_path}) -->
 
