@@ -62,13 +62,22 @@ Default phase (no tag) is `plan/execution`.
 - [ADR-0007: Tauri Updater with GitHub Releases](docs/adr/0007-tauri-updater-with-github-releases.md)
 - [ADR-0008: Quality Attributes and Fitness Functions](docs/adr/0008-quality-attributes-and-fitness-functions.md)
 
-### F. Milestone
+### F. Data Model
+
+<!-- scope: entity catalog, ER diagrams, schema definitions, access patterns, migration strategy -->
+<!-- Format: - [{file_name}]({relative_path}) -->
+
+### G. API Design
+
+<!-- scope: API contracts, endpoint definitions, IPC command schemas, versioning strategy -->
+<!-- Format: - [{file_name}]({relative_path}) -->
+
+### H. Milestone
 
 <!-- scope: implementation decomposition, dependency ordering, progress tracking -->
+<!-- Format: - [{file_name}]({relative_path}) -->
 
-- [2026-03-04-1456-milestone.md](docs/milestone/2026-03-04-1456-milestone.md)
-
-### G. References
+### I. References
 
 <!-- scope: style guides, external references, supplementary documentation -->
 <!-- Format: - [{file_name}]({relative_path}) -->
