@@ -122,6 +122,7 @@ Minimal state is persisted to detect orphans:
 | `region` | Server region |
 | `createdAt` | Provisioning timestamp |
 | `hourlyCost` | For cost estimation |
+| `sshKeyId` | Provider-side SSH key ID for cleanup on crash during provisioning ([ADR-0004](../adr/0004-ephemeral-ssh-keys-per-session.md)) |
 
 This state is cleared on successful disconnection and server destruction.
 
