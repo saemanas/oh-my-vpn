@@ -6,8 +6,10 @@
 
 mod cache;
 mod cloud_provider;
+mod hetzner;
 mod registry;
 
 pub use cache::PricingCache;
 pub use cloud_provider::CloudProvider;
+pub use hetzner::HetznerProvider;
 pub use registry::ProviderRegistry;
