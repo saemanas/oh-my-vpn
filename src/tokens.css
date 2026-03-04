@@ -1,0 +1,185 @@
+/* ===================================================================
+   Oh My VPN -- Design Tokens
+   Baseline: Liquid Glass
+   Generated: 2026-03-04
+   =================================================================== */
+
+:root {
+  /* ── Colors: No primary. Glass is the identity. ── */
+
+  /* Semantic (Vivid Glass: tint 22%, colored shine) */
+  --color-success: #22c55e;
+  --color-success-tint: rgba(34, 197, 94, 0.22);
+  --color-success-shine: rgba(34, 197, 94, 0.4);
+  --color-success-shine-b: rgba(34, 197, 94, 0.25);
+  --color-success-text: #15803d;
+
+  --color-error: #ef4444;
+  --color-error-tint: rgba(239, 68, 68, 0.22);
+  --color-error-shine: rgba(239, 68, 68, 0.4);
+  --color-error-shine-b: rgba(239, 68, 68, 0.25);
+  --color-error-text: #dc2626;
+
+  --color-warning: #f59e0b;
+  --color-warning-tint: rgba(245, 158, 11, 0.22);
+  --color-warning-shine: rgba(245, 158, 11, 0.4);
+  --color-warning-shine-b: rgba(245, 158, 11, 0.25);
+  --color-warning-text: #b45309;
+
+  --color-info: #3b82f6;
+  --color-info-tint: rgba(59, 130, 246, 0.22);
+  --color-info-shine: rgba(59, 130, 246, 0.4);
+  --color-info-shine-b: rgba(59, 130, 246, 0.25);
+  --color-info-text: #1d4ed8;
+
+  /* Neutral (Liquid Glass defaults) */
+  --color-tint: rgba(255, 255, 255, 0.25);
+  --color-tint-subtle: rgba(255, 255, 255, 0.18);
+  --color-tint-strong: rgba(255, 255, 255, 0.30);
+
+  /* Text */
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: rgba(0, 0, 0, 0.6);
+  --color-text-tertiary: rgba(0, 0, 0, 0.35);
+
+  /* ── Typography ── */
+
+  /* Families */
+  --font-family-body: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Helvetica Neue', sans-serif;
+  --font-family-mono: 'SF Mono', SFMono-Regular, Menlo, monospace;
+
+  /* Scale (1.333 ratio) */
+  --font-size-h1: 24px;
+  --font-size-h2: 20px;
+  --font-size-body: 16px;
+  --font-size-body-sm: 14px;
+  --font-size-caption: 13px;
+  --font-size-label: 12px;
+
+  /* Weights */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Line Heights */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.6;
+
+  /* ── Spacing (Airy) ── */
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Shadows (High) ── */
+
+  --shadow-subtle: 0 2px 4px rgba(0, 0, 0, 0.08);
+  --shadow-elevated: 0 6px 6px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 0, 0, 0.1);
+  --shadow-high: 0 12px 24px rgba(0, 0, 0, 0.2), 0 0 32px rgba(0, 0, 0, 0.12);
+
+  /* ── Radius ── */
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 9999px;
+
+  /* ── Shine (Liquid Glass specular edge) ── */
+
+  --shine-edge: inset 2px 2px 1px 0 rgba(255, 255, 255, 0.5),
+                inset -1px -1px 1px 1px rgba(255, 255, 255, 0.5);
+
+  /* ── Z-Index ── */
+
+  --z-base: 0;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+
+  /* ── Motion (Fluid) ── */
+
+  --duration-fast: 200ms;
+  --duration-normal: 400ms;
+  --duration-slow: 650ms;
+  --easing-spring: cubic-bezier(0.175, 0.885, 0.32, 2.2);
+  --easing-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* ── Blur (Liquid Glass) ── */
+
+  --blur-soft: 3px;
+  --blur-overlay: 8px;
+}
+
+/* ── Dark Mode (Soft Dark) ── */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Neutral tint */
+    --color-tint: rgba(30, 30, 40, 0.20);
+    --color-tint-subtle: rgba(30, 30, 40, 0.15);
+    --color-tint-strong: rgba(30, 30, 40, 0.25);
+
+    /* Text */
+    --color-text-primary: #e8e8ed;
+    --color-text-secondary: rgba(255, 255, 255, 0.55);
+    --color-text-tertiary: rgba(255, 255, 255, 0.35);
+
+    /* Semantic (+10% lightness) */
+    --color-success: #4ade80;
+    --color-success-text: #4ade80;
+    --color-error: #f87171;
+    --color-error-text: #f87171;
+    --color-warning: #fbbf24;
+    --color-warning-text: #fbbf24;
+    --color-info: #60a5fa;
+    --color-info-text: #60a5fa;
+
+    /* Shine (reduced) */
+    --shine-edge: inset 2px 2px 1px 0 rgba(255, 255, 255, 0.18),
+                  inset -1px -1px 1px 1px rgba(255, 255, 255, 0.12);
+
+    /* Shadows (2x opacity) */
+    --shadow-subtle: 0 2px 4px rgba(0, 0, 0, 0.16);
+    --shadow-elevated: 0 6px 6px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 0, 0, 0.25);
+    --shadow-high: 0 12px 24px rgba(0, 0, 0, 0.5), 0 0 32px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* ── High Contrast Fallback ── */
+
+@media (prefers-contrast: high) {
+  :root {
+    --color-tint: rgba(255, 255, 255, 0.92);
+    --shine-edge: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+    --color-text-primary: #000;
+  }
+}
+
+@media (prefers-contrast: high) and (prefers-color-scheme: dark) {
+  :root {
+    --color-tint: rgba(30, 30, 40, 0.92);
+    --shine-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+    --color-text-primary: #fff;
+  }
+}
+
+/* ── Reduced Motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 200ms;
+    --duration-slow: 200ms;
+    --easing-spring: ease;
+    --easing-smooth: ease;
+  }
+}
