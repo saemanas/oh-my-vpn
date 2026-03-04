@@ -71,7 +71,8 @@ Default phase (no tag) is `plan/execution`.
 ### G. API Design
 
 <!-- scope: API contracts, endpoint definitions, IPC command schemas, versioning strategy -->
-<!-- Format: - [{file_name}]({relative_path}) -->
+
+- [2026-03-04-1726-api-design.md](docs/api-design/2026-03-04-1726-api-design.md)
 
 ### H. Milestone
 
