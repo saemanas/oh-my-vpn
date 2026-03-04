@@ -2,8 +2,9 @@
 mod error;
 #[allow(unused)]
 mod ipc;
+pub mod types;
 #[allow(unused)]
-mod keychain_adapter;
+pub(crate) mod keychain_adapter;
 #[allow(unused)]
 mod preferences_store;
 #[allow(unused)]
