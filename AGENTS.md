@@ -67,6 +67,8 @@ Default phase (no tag) is `plan/execution`.
 <!-- scope: implementation decomposition, dependency ordering, progress tracking -->
 <!-- Format: - [{file_name}]({relative_path}) -->
 
+- [2026-03-04-1456-milestone.md](docs/milestone/2026-03-04-1456-milestone.md)
+
 ### G. References
 
 <!-- scope: style guides, external references, supplementary documentation -->
