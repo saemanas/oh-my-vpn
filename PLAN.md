@@ -1,68 +1,98 @@
-> **Status**: Completed at 2026-03-04T22:35:00+07:00
-> **Branch**: feat/hetzner-provider
-
 ---
-task: "Hetzner Provider -- CloudProvider trait implementation"
+task: "Implement GCP Provider (CloudProvider trait for google-cloud-compute-v1)"
 milestone: "M2"
-module: "M2.2"
-created_at: "2026-03-04T22:30:00+07:00"
+module: "M2.4"
+created_at: "2026-03-04T23:20:00+07:00"
 status: "completed"
-branch: "feat/hetzner-provider"
+branch: "feat/gcp-provider"
 ---
 
-# M2.2: Hetzner Provider
+> **Status**: Completed at 2026-03-04T23:58:00+07:00
+> **Branch**: feat/gcp-provider
+
+# PLAN -- M2.4: GCP Provider
 
 ## 1. Context
 
 ### A. Problem Statement
 
-Implement the `CloudProvider` trait for Hetzner Cloud using the `hcloud` crate (v0.25). This is the first concrete provider implementation -- it validates the trait interface design and establishes patterns for AWS (M2.3) and GCP (M2.4).
+Implement the GCP cloud provider module (`gcp.rs`) that fulfills the `CloudProvider` trait using the `google-cloud-compute-v1` Rust SDK. This is the third and final provider in M2, following the same trait interface already implemented by Hetzner (`hetzner.rs`) and AWS (`aws.rs`).
 
 ### B. Current State
 
-- `CloudProvider` trait defined in `src-tauri/src/provider_manager/cloud_provider.rs` with 7 async methods
-- `ProviderRegistry` and `PricingCache` implemented in M2.1
-- `ProviderError` enum with `From<ProviderError> for AppError` conversion in `src-tauri/src/error.rs`
-- Shared types (`RegionInfo`, `ServerInfo`, `ServerStatus`, `Provider`) in `src-tauri/src/types.rs`
-- `Cargo.toml` does NOT yet include `hcloud` or `tokio` -- must be added
-- No provider implementation exists yet
+- **CloudProvider trait**: 7 async methods defined in `src-tauri/src/provider_manager/cloud_provider.rs` -- `validate_credential`, `list_regions`, `create_ssh_key`, `delete_ssh_key`, `create_server`, `destroy_server`, `get_server`
+- **Hetzner**: Fully implemented in `hetzner.rs` (~350 lines). Uses `hcloud` crate. Simple API -- bearer token auth, pricing from `/pricing` endpoint, region → cheapest server type cache
+- **AWS**: Fully implemented in `aws.rs` (~600 lines). Uses `aws-sdk-ec2` + `aws-sdk-pricing`. Compound credentials format (`ACCESS_KEY:SECRET_KEY`), deferred SSH key import pattern, compound server_id (`region/instance_id/sg_id`), security group management
+- **Registry**: `ProviderRegistry` in `registry.rs` stores `Box<dyn CloudProvider>` keyed by `Provider` enum (which already has `Provider::Gcp`)
+- **Types**: `RegionInfo`, `ServerInfo`, `ServerStatus`, `Provider` defined in `types.rs`
+- **Errors**: `ProviderError` enum in `error.rs` with all needed variants
+- **mod.rs**: Currently exports `HetznerProvider`, `AwsProvider`, `PricingCache`, `CloudProvider`, `ProviderRegistry` -- needs `GcpProvider` added
 
 ### C. Constraints
 
-- `hcloud` crate is OpenAPI-generated -- all API calls require `&configuration::Configuration` + params struct pattern
-- Hetzner API uses bearer token auth via `configuration.bearer_access_token`
-- Server IDs are `i64` in hcloud but `String` in our trait -- conversion required
-- Pricing values are `String` (e.g., `"0.0048000000000000"`) -- must parse to `f64`
-- `list_server_types` default pagination returns only 25 results -- must set `per_page: 50`
+- Must follow identical trait contract as Hetzner/AWS implementations
+- GCP uses zone-scoped operations (not region-scoped like AWS)
+- GCP SSH keys are managed via project/instance metadata (not key pairs like AWS/Hetzner)
+- GCP firewall rules are network-level (similar to AWS security groups but different API)
+- GCP Compute operations return Long Running Operations (LROs) -- the SDK handles polling internally
+- Service Account JSON stored as single string in Keychain (similar to AWS compound credential pattern)
 
 ### D. Input Sources
 
-- Milestone: `docs/milestone/2026-03-04-1726-milestone.md` -- M2.2
-- API design: `docs/api-design/2026-03-04-1726-api-design.md` -- §4.F (CloudProvider trait)
-- ADR-0002: Use Rust SDK for Cloud Providers
-- ADR-0005: Use Provider Pricing API
-- Cross-cutting: `docs/architecture/cross-cutting-concepts.md` -- §6.B (cloud-init provider variation)
+- Milestone: `docs/milestone/2026-03-04-1726-milestone.md` §M2.4
+- API Design: `docs/api-design/2026-03-04-1726-api-design.md` §4.F (CloudProvider trait)
+- ADR-0002: `docs/adr/0002-use-rust-sdk-for-cloud-providers.md`
+- ADR-0005: `docs/adr/0005-use-provider-pricing-api.md`
+- Cross-cutting: `docs/architecture/cross-cutting-concepts.md` §6.B (cloud-init provider variation)
 
 ### E. Verified Facts
 
-| # | What was tested | Result | Decision |
-| --- | --- | --- | --- |
-| 1 | Invalid API key → `list_servers` | `401 Unauthorized`, `code: "unauthorized"` | Use `list_servers` for `validate_credential` -- 401 maps to `AuthInvalidKey` |
-| 2 | Invalid API key → `get_server` | Same 401 format | Error mapping is consistent across endpoints |
-| 3 | `list_locations` response | 6 locations: `fsn1`, `nbg1`, `hel1`, `ash`, `hil`, `sin` with city/country/description | Join with pricing data for `RegionInfo.display_name` |
-| 4 | CX22 pricing per location | CX22 available in EU only (`fsn1`, `nbg1`, `hel1`) -- not in US/SG | Cannot hardcode server type -- must dynamically select cheapest per location |
-| 5 | Cheapest server type per location | EU: `cx23` (0.0048 EUR/hr), US: `cpx11` (0.0072), SG: `cpx12` (0.0096) | `list_regions` must find cheapest shared type per location from pricing API |
-| 6 | SSH key create/delete round-trip | create returns `i64` id (e.g., `108532637`), delete by id works | `i64.to_string()` for trait, `parse::<i64>()` back for API calls |
-| 7 | `CreateServerRequest` fields | `image` (String), `name` (String), `server_type` (String), `location` (Option), `ssh_keys` (Option<Vec<String>>), `user_data` (Option) | All fields available for server provisioning with cloud-init |
-| 8 | Server IP location | `server.public_net.ipv4.ip` (String) | Direct mapping to `ServerInfo.public_ip` |
-| 9 | Server status enum | `Initializing`, `Running`, `Deleting`, `Off`, `Starting`, `Stopping`, `Unknown` | Map `Initializing`/`Starting` → `Provisioning`, `Running` → `Running`, `Deleting` → `Deleting` |
-| 10 | Pricing `price_hourly.gross` format | String `"0.0048000000000000"` | `parse::<f64>()` with fallback to `f64::MAX` for unparseable |
-| 11 | `per_page` pagination | Default returns 25 server types -- CX22/CX23 cut off on `list_server_types` | Not applicable -- implementation uses `pricing_api::list_prices` which returns all types without pagination |
-| 12 | hcloud `Configuration` | `bearer_access_token: Option<String>`, `client: reqwest::Client` | Create new `Configuration` per call with api_key from Keychain |
+1. **Crate availability and compilation**
+   - Tested: `cargo add google-cloud-compute-v1@2.2 google-cloud-auth@1.6` + `cargo check`
+   - Result: Compiles cleanly with features `[firewalls, machine-types, zones, images, instances, projects]`
+   - Decision: Use `google-cloud-compute-v1 = { version = "2.2", features = ["firewalls", "machine-types", "zones", "images"] }` (instances + projects are default features)
+
+2. **Authentication from Service Account JSON**
+   - Tested: docs.rs API for `google-cloud-auth::credentials::service_account::Builder`
+   - Result: `Builder::new(serde_json::Value).build()` creates `Credentials` from JSON directly -- no temp file needed
+   - Decision: Store full Service Account JSON string in Keychain, parse with `serde_json::from_str`, pass to `Builder::new()`
+
+3. **Client initialization with credentials**
+   - Tested: docs.rs API for `ClientBuilder::with_credentials()`
+   - Result: Each client (Instances, Firewalls, MachineTypes, Zones) supports `.builder().with_credentials(creds).build().await`
+   - Decision: Build separate clients per operation, passing credentials each time (no stored state)
+
+4. **Available client types**
+   - Tested: docs.rs module listing for `google_cloud_compute_v1::client`
+   - Result: `Instances` (insert/delete/get/list), `Firewalls` (insert/delete), `MachineTypes` (list), `Zones` (list), `Projects` (get), `Images` (list)
+   - Decision: Use `Instances` for server CRUD, `Firewalls` for firewall rules, `MachineTypes` for pricing, `Zones` for zone listing
+
+5. **Instance operations are LROs**
+   - Tested: docs.rs -- `Instances::insert()` returns an operation, not an instance directly
+   - Result: The `google-cloud-lro` crate handles LRO polling automatically
+   - Decision: Rely on SDK's built-in LRO polling; add manual polling as fallback for status verification
 
 ### F. Unverified Assumptions
 
-None -- all assumptions verified via spike code.
+1. **MachineTypes pricing via `guest_cpus` and zone listing**
+   - Assumption: `MachineTypes::list()` per zone returns `guest_cpus` field that can determine e2-micro, and we can derive hourly cost from the response
+   - Risk: **Medium** -- GCP pricing is complex; MachineTypes may not include hourly cost directly
+   - Fallback: Use hardcoded e2-micro pricing per zone (GCP pricing rarely changes for e2-micro), or use Cloud Billing Catalog API (would need additional crate)
+
+2. **Firewall rule creation API shape**
+   - Assumption: `Firewalls::insert()` accepts a `Firewall` model with `allowed` rules specifying protocol/ports and `source_ranges` for CIDR
+   - Risk: **Low** -- this is standard GCP Compute API, well-documented
+   - Fallback: Use `gcloud` CLI invocation as last resort
+
+3. **SSH key via instance metadata**
+   - Assumption: SSH keys can be set via instance metadata field `ssh-keys` in the `Metadata` struct during `Instances::insert()`
+   - Risk: **Low** -- this is the standard GCP approach for non-OS Login setups
+   - Fallback: Use project-level metadata instead of instance-level
+
+4. **Ubuntu image discovery**
+   - Assumption: `Images::list()` with project `ubuntu-os-cloud` and filter for `ubuntu-2404` returns available images
+   - Risk: **Low** -- canonical approach for GCP image discovery
+   - Fallback: Hardcode the image family `ubuntu-2404-lts-amd64`
 
 ---
 
@@ -71,198 +101,205 @@ None -- all assumptions verified via spike code.
 ### A. Diagram
 
 ```mermaid
-flowchart TD
-    subgraph provider_manager["provider_manager/"]
-        trait_cp["CloudProvider trait"]
-        registry["ProviderRegistry"]
-        cache["PricingCache"]
-        hetzner["HetznerProvider<br/>(new)"]
-    end
+classDiagram
+    class CloudProvider {
+        <<trait>>
+        +validate_credential(api_key) Result~()~
+        +list_regions(api_key) Result~Vec~RegionInfo~~
+        +create_ssh_key(api_key, public_key, label) Result~String~
+        +delete_ssh_key(api_key, key_id) Result~()~
+        +create_server(api_key, region, ssh_key_id, cloud_init) Result~ServerInfo~
+        +destroy_server(api_key, server_id) Result~()~
+        +get_server(api_key, server_id) Result~Option~ServerInfo~~
+    }
 
-    subgraph hcloud_crate["hcloud crate (0.25)"]
-        servers["servers_api"]
-        ssh_keys["ssh_keys_api"]
-        pricing["pricing_api"]
-        locations["locations_api"]
-        config["Configuration"]
-    end
+    class GcpProvider {
+        -zone_machine_types: Arc~RwLock~HashMap~~
+        -pending_ssh_key: Arc~RwLock~Option~~
+        +new() GcpProvider
+    }
 
-    hetzner -->|implements| trait_cp
-    registry -->|stores| hetzner
-    hetzner --> config
-    hetzner --> servers
-    hetzner --> ssh_keys
-    hetzner --> pricing
-    hetzner --> locations
-    cache -.->|"cached by<br/>ProviderRegistry"| hetzner
+    class HetznerProvider {
+        -region_server_types: Arc~RwLock~HashMap~~
+    }
+
+    class AwsProvider {
+        -region_instance_types: Arc~RwLock~HashMap~~
+        -pending_ssh_key: Arc~RwLock~Option~~
+        -ami_cache: Arc~RwLock~HashMap~~
+    }
+
+    CloudProvider <|.. GcpProvider
+    CloudProvider <|.. HetznerProvider
+    CloudProvider <|.. AwsProvider
 ```
 
 ### B. Decisions
 
-1. **Configuration per-call** -- create a new `hcloud::Configuration` with `bearer_access_token` on each method call. Keys come from Keychain per-call, never cached in the provider struct. (Principle: Explicit over Implicit)
+1. **Deferred SSH key pattern** (same as AWS): `create_ssh_key` caches key material internally; actual metadata injection happens in `create_server` where the zone is known. Returns `pending/{label}` synthetic ID.
+   - Rationale: The trait's `create_ssh_key` has no zone parameter, but GCP SSH keys are injected as instance metadata at creation time. (Principle: Composition over Inheritance -- reuse the same pattern AWS established)
 
-2. **Dynamic cheapest server type** -- `list_regions` queries `pricing_api::list_prices` and finds the cheapest shared server type per location, rather than hardcoding `cx22`. This handles location-specific availability and future price changes. (Principle: Fail Fast -- no stale assumptions)
+2. **Compound server_id**: `{project_id}/{zone}/{instance_name}/{firewall_name}`
+   - Rationale: GCP operations require project + zone + instance name. Firewall name needed for cleanup. Same pattern as AWS's `region/instance_id/sg_id`. (Principle: Explicit over Implicit)
 
-3. **Error mapping helper** -- centralized `map_hcloud_error` function converts `hcloud::apis::Error` to `ProviderError` by inspecting HTTP status codes and response body. (Principle: Single Responsibility)
+3. **Compound key_id**: `pending/{label}` or `{project_id}/{zone}/{label}` (after injection)
+   - Rationale: SSH keys are instance metadata in GCP -- "deletion" means the instance is destroyed. Pending keys clear internal cache.
 
-4. **Region-to-server-type cache** -- `HetznerProvider` holds an internal `RwLock<HashMap<String, String>>` mapping region code → cheapest server type name. Populated when `list_regions` is called. `create_server` reads from this cache to resolve the server type for a given region; if cache miss, calls pricing API inline. This avoids re-querying pricing on every server creation while keeping the trait signature unchanged (`create_server` has no `server_type` parameter). (Principle: Explicit over Implicit)
+4. **Credentials format**: Full Service Account JSON string stored in Keychain
+   - Rationale: GCP Service Account JSON contains project_id, client_email, and private_key -- all needed for authentication. Stored as single string, parsed per call. (Principle: Fail Fast -- parse validates JSON structure)
 
-5. **Polling until Running** -- the `CloudProvider::create_server` trait doc specifies "Returns server info once the server is running." Hetzner's API returns immediately with `Initializing` status. `HetznerProvider::create_server` must poll via `get_server` until status reaches `Running` (with timeout and exponential backoff). This fulfills the trait contract and ensures the IP is reachable and cloud-init has completed before Server Lifecycle proceeds to tunnel setup. (Principle: Fail Fast)
+5. **Zone-based regions**: List zones (not regions) as the selectable unit, since GCP pricing varies per zone
+   - Rationale: GCP machine type availability and pricing are zone-specific. Displaying zones gives accurate pricing. Display format: `us-central1-a` → `Iowa, US (us-central1-a)`
+
+6. **e2-micro as default instance type**: Hardcode `e2-micro` for MVP (cheapest general-purpose)
+   - Rationale: Unlike Hetzner (which discovers cheapest via pricing API) or AWS (fixed t3.nano), GCP's cheapest varies less. e2-micro is free-tier eligible and available in all zones. Pricing can be fetched from MachineTypes API.
 
 ### C. Boundaries
 
-| File | Responsibility |
+| Scope | Responsibility |
 | --- | --- |
-| `src-tauri/src/provider_manager/hetzner.rs` | `HetznerProvider` struct + all 7 trait methods + error mapping helper |
-| `src-tauri/src/provider_manager/mod.rs` | Add `mod hetzner; pub use hetzner::HetznerProvider;` |
-| `src-tauri/Cargo.toml` | Add `hcloud`, `tokio` dependencies |
+| `src-tauri/src/provider_manager/gcp.rs` | All GCP CloudProvider implementation, helpers, unit tests, integration tests |
+| `src-tauri/src/provider_manager/mod.rs` | Add `mod gcp;` and `pub use gcp::GcpProvider;` |
+| `src-tauri/Cargo.toml` | Add `google-cloud-compute-v1` and `google-cloud-auth` dependencies |
 
 ### D. Trade-offs
 
-| Choice | Alternative | Why chosen |
-| --- | --- | --- |
-| Dynamic cheapest type | Hardcode CX22 | CX22 is EU-only -- US/SG would have zero regions |
-| `list_servers` for validation | Dedicated auth endpoint | Hetzner has no auth-check endpoint; `list_servers` is cheapest call |
-| Gross price (incl. VAT) | Net price | End users see what they actually pay |
-| `per_page: 50` | Paginate all pages | Hetzner has ~25 server types -- single page suffices |
+- **MachineTypes API vs Cloud Billing API for pricing**: MachineTypes may not include direct hourly USD cost. Cloud Billing requires a separate crate. Decision: try MachineTypes first; if no pricing data, use hardcoded e2-micro prices as fallback (ADR-0005 prefers API but accepts cache/fallback).
+- **Instance-level vs project-level SSH metadata**: Instance-level is cleaner (no side effects on other instances) but requires setting metadata at creation time. Decision: instance-level (aligns with ephemeral pattern in ADR-0004).
 
 ---
 
 ## 3. Steps
 
-### Step 1: Add dependencies and scaffold HetznerProvider
+### Step 1: Add dependencies to Cargo.toml
 
-- [x] **Status**: completed at 2026-03-04T22:30:00+07:00
-- **Scope**: `src-tauri/Cargo.toml`, `src-tauri/src/provider_manager/hetzner.rs`, `src-tauri/src/provider_manager/mod.rs`
+- [x] **Status**: completed at 2026-03-04T23:22:00+07:00
+- **Scope**: `src-tauri/Cargo.toml`
 - **Dependencies**: none
-- **Description**: Add `hcloud = "0.25"` and `tokio = { version = "1", features = ["full"] }` to Cargo.toml. Create `hetzner.rs` with `HetznerProvider` struct holding `region_server_types: RwLock<HashMap<String, String>>` for region → cheapest server type caching. Add `make_configuration` helper that builds `hcloud::apis::configuration::Configuration` from an api_key, and `map_hcloud_error` helper that converts `hcloud::apis::Error<T>` to `ProviderError`. Register the module in `mod.rs`. Run `cargo check` to verify.
+- **Description**: Add `google-cloud-compute-v1` and `google-cloud-auth` crates with required features. Run `cargo check` to verify compilation.
 - **Acceptance Criteria**:
-  - `hcloud` and `tokio` in Cargo.toml dependencies
-  - `HetznerProvider` struct with `region_server_types: RwLock<HashMap<String, String>>` field
-  - `HetznerProvider::new()` constructor initializing empty cache
-  - `make_configuration(api_key: &str) -> Configuration` helper
-  - `map_hcloud_error` maps: 401 → `AuthInvalidKey`, 403 → `AuthInsufficientPermissions`, 429 → `RateLimited`, 5xx → `ServerError`, timeout → `Timeout`, other → `Other`
-  - `mod.rs` exports `HetznerProvider`
+  - `google-cloud-compute-v1 = { version = "2.2", features = ["firewalls", "machine-types", "zones", "images"] }` in Cargo.toml
+  - `google-cloud-auth = "1.6"` in Cargo.toml
   - `cargo check` passes
 
-### Step 2: Implement validate_credential
+### Step 2: Implement GcpProvider struct and helpers
 
-- [x] **Status**: completed at 2026-03-04T22:30:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/hetzner.rs`
+- [x] **Status**: completed at 2026-03-04T23:25:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/gcp.rs`, `src-tauri/src/provider_manager/mod.rs`
 - **Dependencies**: Step 1
-- **Description**: Implement `validate_credential` by calling `servers_api::list_servers` with default params. Success (any status code 2xx) → `Ok(())`. Error → map via `map_hcloud_error`.
+- **Description**: Create `gcp.rs` with `GcpProvider` struct, credential parsing helper (Service Account JSON → `Credentials`), client builder helpers, error mapping (`google-cloud-gax` errors → `ProviderError`), zone display name mapper, compound ID parsers, and server status mapper. Register module in `mod.rs`.
 - **Acceptance Criteria**:
-  - Valid key returns `Ok(())`
-  - Invalid key returns `Err(ProviderError::AuthInvalidKey(_))`
-  - Network error returns appropriate `ProviderError` variant
+  - `GcpProvider` struct with `zone_machine_types: Arc<RwLock<HashMap<String, String>>>` and `pending_ssh_key: Arc<RwLock<Option<PendingSshKey>>>`
+  - `parse_gcp_credentials(api_key: &str) -> Result<(serde_json::Value, String), ProviderError>` -- parses JSON, extracts project_id
+  - `build_credentials(sa_json: &serde_json::Value) -> Result<Credentials, ProviderError>` -- builds auth credentials
+  - `map_gcp_error<T: Debug>(error: T) -> ProviderError` -- maps SDK errors to ProviderError
+  - `parse_compound_server_id` / `parse_compound_key_id` helpers
+  - `get_zone_display_name(zone: &str) -> String` -- human-readable zone names
+  - `mod.rs` updated with `mod gcp;` and `pub use gcp::GcpProvider;`
+  - `cargo check` passes
 
-### Step 3: Implement list_regions
+### Step 3: Implement validate_credential and list_regions
 
-- [x] **Status**: completed at 2026-03-04T22:30:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/hetzner.rs`
-- **Dependencies**: Step 1
-- **Description**: Implement `list_regions` by:
-  1. Call `pricing_api::list_prices` to get all server type prices per location
-  2. Call `locations_api::list_locations` to get display names
-  3. For each location, find the cheapest server type (by `price_hourly.gross` parsed to `f64`)
-  4. Join with location data to build `display_name` as `"{city}, {country}"` (e.g., `"Falkenstein, DE"`)
-  5. **Populate `self.region_server_types` cache** with region → cheapest server type name mapping
-  6. Return `Vec<RegionInfo>` sorted by `hourly_cost` ascending
+- [x] **Status**: completed at 2026-03-04T23:32:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
+- **Dependencies**: Step 2
+- **Description**: Implement `validate_credential` (call `Projects::get` or `Instances::list` to verify API key) and `list_regions` (list zones, query MachineTypes per zone for e2-micro pricing, populate zone_machine_types cache).
 - **Acceptance Criteria**:
-  - Returns all 6 Hetzner locations with correct cheapest type per location
-  - `hourly_cost` parsed from `price_hourly.gross` String to `f64`
-  - `display_name` format: `"{city}, {country}"`
-  - Results sorted by `hourly_cost` ascending
-  - `region_server_types` cache populated after call
-  - API errors mapped via `map_hcloud_error`
+  - `validate_credential`: parses SA JSON, builds credentials, calls GCP API to verify access
+  - `list_regions`: returns zones with e2-micro hourly cost, sorted ascending
+  - Zone-to-machine-type cache populated during `list_regions`
+  - Unit tests for credential parsing and zone display names
 
-### Step 4: Implement create_ssh_key and delete_ssh_key
+### Step 4: Implement SSH key management (create_ssh_key, delete_ssh_key)
 
-- [x] **Status**: completed at 2026-03-04T22:30:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/hetzner.rs`
-- **Dependencies**: Step 1
-- **Description**: Implement SSH key CRUD:
-  - `create_ssh_key`: build `CreateSshKeyRequest` with `name` = label, `public_key` = public_key. Return `ssh_key.id.to_string()`.
-  - `delete_ssh_key`: parse `key_id` to `i64`, call `ssh_keys_api::delete_ssh_key`.
+- [x] **Status**: completed at 2026-03-04T23:35:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
+- **Dependencies**: Step 2
+- **Description**: Implement deferred SSH key pattern -- `create_ssh_key` caches key material (same as AWS pattern), `delete_ssh_key` clears cache for pending keys.
 - **Acceptance Criteria**:
-  - `create_ssh_key` returns provider-side key ID as `String`
-  - `delete_ssh_key` accepts `String` key_id, parses to `i64`, deletes
-  - Invalid key_id format returns `ProviderError::Other`
-  - API errors mapped via `map_hcloud_error`
+  - `create_ssh_key` returns `pending/{label}` and caches public key material
+  - `delete_ssh_key` with `pending/` prefix clears internal cache without API call
+  - Unit tests verify pending key cache behavior
 
-### Step 5: Implement create_server, destroy_server, get_server
+### Step 5: Implement create_server
 
-- [x] **Status**: completed at 2026-03-04T22:30:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/hetzner.rs`
-- **Dependencies**: Step 1, Step 3 (needs to know cheapest server type per region)
-- **Description**: Implement server lifecycle:
-  - `create_server(api_key, region, ssh_key_id, cloud_init)`:
-    - Resolve `server_type` from `self.region_server_types` cache (populated by `list_regions`). On cache miss, call pricing API inline to populate.
-    - Build `CreateServerRequest` with `image: "ubuntu-24.04"`, `name: "oh-my-vpn-{timestamp}"`, `server_type`, `location: region`, `ssh_keys: [ssh_key_id]`, `user_data: cloud_init`, `start_after_create: true`
-    - After Hetzner API returns (server in `Initializing` state), **poll via `get_server` until status reaches `Running`** -- with exponential backoff (3s initial, 2x multiplier, 15s cap), max 120s timeout (NFR-PERF-1). On timeout → `ProviderError::ProvisioningFailed`.
-    - Extract `server.id.to_string()`, `server.public_net.ipv4.ip` from the Running server
-    - Return `ServerInfo` with `status: Running`
-  - `destroy_server(api_key, server_id)`: parse to `i64`, call `delete_server`
-  - `get_server(api_key, server_id)`: parse to `i64`, call `get_server`. 404/not-found → `Ok(None)`, found → `Ok(Some(ServerInfo))`
+- [x] **Status**: completed at 2026-03-04T23:48:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
+- **Dependencies**: Step 3, Step 4
+- **Description**: Implement full server provisioning flow: parse SA JSON → build credentials → create firewall rule (WireGuard UDP 51820) → resolve Ubuntu image → insert instance with startup-script metadata and SSH key metadata → poll until RUNNING → return ServerInfo with compound ID.
 - **Acceptance Criteria**:
-  - `create_server` resolves `server_type` from `region_server_types` cache; falls back to pricing API on cache miss
-  - `create_server` polls until server reaches `Running` status (max 120s, 5s interval)
-  - On polling timeout → `ProviderError::ProvisioningFailed`
-  - Server name follows `oh-my-vpn-{unix_timestamp}` pattern
-  - Image hardcoded to `ubuntu-24.04`
-  - `destroy_server` converts `String` → `i64` and calls delete
-  - `get_server` returns `None` for non-existent server, `Some(ServerInfo)` for existing
-  - Status mapping: `Initializing`/`Starting` → `Provisioning`, `Running` → `Running`, `Deleting` → `Deleting`
-  - All API errors mapped via `map_hcloud_error`
+  - Creates firewall rule allowing UDP 51820 from 0.0.0.0/0
+  - Resolves latest Ubuntu 24.04 image from `ubuntu-os-cloud` project
+  - Instance created with e2-micro type, startup-script metadata (cloud_init), SSH key in metadata
+  - Polls instance until RUNNING status (max 120s)
+  - Returns `ServerInfo` with compound ID `{project_id}/{zone}/{instance_name}/{firewall_name}`
+  - Cleanup on failure: delete firewall if created, delete instance if created
+  - Instance named `oh-my-vpn-{timestamp}`, firewall named `oh-my-vpn-{timestamp}`
 
-### Step 6: Tests
+### Step 6: Implement destroy_server and get_server
 
-- [x] **Status**: completed at 2026-03-04T22:30:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/hetzner.rs` (inline `#[cfg(test)]` module)
-- **Dependencies**: Step 2, Step 3, Step 4, Step 5
-- **Description**: Write unit tests and integration tests:
-  - **Unit tests** (no API key needed):
-    - `map_hcloud_error` produces correct `ProviderError` variants
-    - Pricing parsing: gross string → f64 conversion
-    - Server ID string ↔ i64 conversion
-    - Status mapping correctness
-  - **Integration tests** (gated by `HETZNER_API_KEY` env var, `#[ignore]`):
-    - `validate_credential` with valid key → Ok
-    - `validate_credential` with invalid key → AuthInvalidKey
-    - `list_regions` returns non-empty Vec sorted by cost
-    - SSH key create/delete round-trip
-    - (Server create/destroy is expensive -- defer to M4 end-to-end test)
+- [x] **Status**: completed at 2026-03-04T23:53:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
+- **Dependencies**: Step 2
+- **Description**: Implement `destroy_server` (delete instance + delete firewall rule) and `get_server` (check instance existence and status).
 - **Acceptance Criteria**:
+  - `destroy_server`: deletes instance, then deletes firewall rule (best-effort with retries)
+  - `get_server`: returns `Some(ServerInfo)` if instance exists, `None` if not found (TERMINATED treated as None)
+  - Compound server_id parsed correctly for all operations
+
+### Step 7: Integration tests and final verification
+
+- [x] **Status**: completed at 2026-03-04T23:58:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
+- **Dependencies**: Step 5, Step 6
+- **Description**: Add `#[ignore]` integration tests gated by `GCP_TEST_CREDENTIALS` env var. Run `cargo check`, `cargo test` (unit tests only), `cargo clippy`.
+- **Acceptance Criteria**:
+  - Integration tests: `test_validate_credential_valid`, `test_validate_credential_invalid`, `test_list_regions`, `test_server_create_destroy`
   - All unit tests pass with `cargo test`
-  - Integration tests pass with `HETZNER_API_KEY=... cargo test -- --ignored`
-  - No compilation warnings
-  - `cargo clippy` clean
+  - `cargo clippy` passes with no warnings
+  - `cargo check` passes
 
 ---
 
 ## 4. Execution Strategy
 
-| Step | Chain | Complexity | Rationale |
-| --- | --- | --- | --- |
-| 1 | Direct | Trivial | Cargo.toml + scaffold boilerplate |
-| 2 | scout → worker | Simple | Error mapping needs crate source reference |
-| 3 | scout → worker | Medium | Pricing join logic -- most complex method |
-| 4 | Direct | Trivial | Simple CRUD wrapping |
-| 5 | scout → worker | Medium | Server lifecycle + dynamic type resolution |
-| 6 | scout → worker → reviewer | Medium | Test quality needs review |
+| Step | Chain | Rationale |
+| --- | --- | --- |
+| 1 | Direct | Single config file change |
+| 2 | scout → worker | Scaffolding needs codebase context for consistent patterns |
+| 3 | scout → worker | SDK API research needed + implementation |
+| 4 | Direct | Small, follows established AWS pattern exactly |
+| 5 | scout → worker → reviewer | Most complex step -- server provisioning with cleanup logic |
+| 6 | scout → worker | Moderate complexity, follows existing patterns |
+| 7 | Direct | Test writing + verification commands |
 
 ### A. Execution Order
 
 ```plain
-Step 1 → Step 2 ─┐
-          Step 3 ─┤ (parallel after Step 1)
-          Step 4 ─┘
-              └──→ Step 5 → Step 6
+Step 1 → Step 2 → Step 3 → Step 4 → Step 5 → Step 6 → Step 7
 ```
 
-Steps 2, 3, 4 can run in parallel after Step 1 since they modify independent sections of the same file. Step 5 depends on Step 3 (pricing logic for server type resolution). Step 6 depends on all previous steps.
+All sequential -- single file constraint (`gcp.rs`) makes parallel execution impractical. Steps 3 and 4 could theoretically be parallel but share the same file.
 
-### B. Risk Flags
+### B. Estimated Complexity
 
-- **Step 3**: Pricing parsing is the most complex logic -- if the pricing API structure changes or has edge cases (missing locations, zero prices), the parsing may fail. Mitigation: defensive parsing with `unwrap_or(f64::MAX)`.
-- **Step 5**: `create_server` polling loop -- server may take 30--90s to reach Running. Timeout must respect NFR-PERF-1 (120s total for full connect flow). If Hetzner API is slow, polling may exhaust the budget before tunnel setup. Mitigation: 120s max for polling, Server Lifecycle owns the overall timeout.
+| Step | Tier | Est. Lines |
+| --- | --- | --- |
+| 1 | Trivial | ~3 |
+| 2 | Medium | ~120 |
+| 3 | Medium | ~100 |
+| 4 | Simple | ~40 |
+| 5 | Complex | ~200 |
+| 6 | Medium | ~80 |
+| 7 | Simple | ~100 |
+
+Total: ~640 lines in `gcp.rs` (comparable to AWS's ~600 lines)
+
+### C. Risk Flags
+
+- **Step 3 (list_regions)**: GCP pricing from MachineTypes API may not include hourly cost directly. May need fallback to hardcoded prices or Cloud Billing API.
+- **Step 5 (create_server)**: LRO handling for instance creation -- SDK should handle this but may need manual polling. Metadata format for SSH keys and startup-script needs exact field names.
+
+### D. Single-File Constraint
+
+Steps 2--7 all modify `gcp.rs`. Resolution: **Sequential Direct** -- steps have distinct acceptance criteria and build incrementally. Each step appends to the file without conflicting with previous steps.

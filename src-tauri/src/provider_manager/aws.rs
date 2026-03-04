@@ -103,7 +103,7 @@ impl AwsProvider {
         images.sort_by(|a, b| {
             b.creation_date()
                 .unwrap_or_default()
-                .cmp(&a.creation_date().unwrap_or_default())
+                .cmp(a.creation_date().unwrap_or_default())
         });
 
         let ami_id = images

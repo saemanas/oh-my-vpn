@@ -32,4 +32,6 @@ aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-sdk-ec2 = "1"
 aws-sdk-pricing = "1"
 base64 = "0.22"
+google-cloud-compute-v1 = { version = "2.2", features = ["firewalls", "machine-types", "zones", "images"] }
+google-cloud-auth = "1.6"
 
