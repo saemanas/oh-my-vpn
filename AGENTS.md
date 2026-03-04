@@ -19,20 +19,28 @@ Default phase (no tag) is `plan/execution`.
 
 ### A. Product
 
+<!-- scope: requirements, user stories, prioritization, release phasing -->
+
 - [brainstorming](docs/brainstorming/2026-03-03-0433-brainstorming.md) <!-- phase: ideation -->
 - [product-brief](docs/product-brief/2026-03-03-0537-product-brief.md) <!-- phase: ideation -->
 - [prd](docs/prd/2026-03-03-0537-prd.md)
 
 ### B. UX Design
 
+<!-- scope: user journeys, interaction patterns, component strategy, accessibility -->
+
 - [ux-design](docs/ux-design/2026-03-03-1619-ux-design.md)
 
 ### C. UI Design
+
+<!-- scope: design tokens, component specs, wireframes, layout system, theme -->
 
 - [ui-design](docs/ui-design/2026-03-04-0123-ui-design.md)
 - [tokens.css](docs/ui-design/tokens.css)
 
 ### D. Architecture
+
+<!-- scope: system boundary, module structure, dependencies, deployment, cross-cutting concerns, quality attributes, drift prevention -->
 
 - [context.md](docs/architecture/context.md)
 - [containers.md](docs/architecture/containers.md)
@@ -42,6 +50,8 @@ Default phase (no tag) is `plan/execution`.
 - [drift-prevention.md](docs/architecture/drift-prevention.md)
 
 ### E. ADR
+
+<!-- scope: resolved technical decisions and constraints -->
 
 - [ADR-0001: Use wireguard-go with wg-quick](docs/adr/0001-use-wireguard-go-with-wg-quick.md)
 - [ADR-0002: Use Rust SDK for Cloud Providers](docs/adr/0002-use-rust-sdk-for-cloud-providers.md)
@@ -54,10 +64,12 @@ Default phase (no tag) is `plan/execution`.
 
 ### F. Milestone
 
+<!-- scope: implementation decomposition, dependency ordering, progress tracking -->
 <!-- Format: - [{file_name}]({relative_path}) -->
 
 ### G. References
 
+<!-- scope: style guides, external references, supplementary documentation -->
 <!-- Format: - [{file_name}]({relative_path}) -->
 
 ---
