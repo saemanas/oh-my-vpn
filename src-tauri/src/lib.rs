@@ -58,6 +58,19 @@ pub fn run() {
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            ipc::provider::register_provider,
+            ipc::provider::remove_provider,
+            ipc::provider::list_providers,
+            ipc::provider::list_regions,
+            ipc::server::connect,
+            ipc::server::disconnect,
+            ipc::server::check_orphaned_servers,
+            ipc::server::resolve_orphaned_server,
+            ipc::session::get_session_status,
+            ipc::preferences::get_preferences,
+            ipc::preferences::update_preferences,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

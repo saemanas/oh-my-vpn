@@ -39,6 +39,14 @@ impl Provider {
     }
 }
 
+/// Action to take on an orphaned server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OrphanAction {
+    Destroy,
+    Reconnect,
+}
+
 impl fmt::Display for Provider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
