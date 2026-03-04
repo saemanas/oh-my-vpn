@@ -152,11 +152,11 @@ Verified compatible via `cargo check` and `bun install` on 2026-03-04.
 
 ### D. Stack Change Policy
 
-이 테이블은 프로젝트의 **확정된 의존성 목록**이다. 변경 시 다음을 따른다:
+These tables are the **confirmed dependency list** for the project. Follow these rules on any change:
 
-1. **추가** -- crates.io/npm에서 최신 stable 확인 후, 기존 스택과 `cargo check` / `bun install`로 호환성 검증. 통과 시 테이블에 추가
-2. **버전 업그레이드** -- major bump은 ADR 작성. minor/patch는 테이블 버전 업데이트 + 검증
-3. **제거** -- 해당 crate를 참조하는 코드/문서가 없는지 `grep` 확인 후 테이블에서 삭제
-4. **검증 주기** -- 새 마일스톤 착수 시 전체 스택 최신 버전 확인 및 호환성 재검증
+1. **Add** -- check latest stable on crates.io/npm, verify compatibility with existing stack via `cargo check` / `bun install`, then add to table
+2. **Upgrade** -- major bump requires an ADR. Minor/patch bumps update the table version + verify
+3. **Remove** -- confirm no code/docs reference the crate (`grep`), then delete from table
+4. **Review cycle** -- re-verify latest versions and full-stack compatibility at the start of each new milestone
 
 ---
