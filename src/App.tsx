@@ -6,7 +6,8 @@ function App() {
 				alignItems: "center",
 				justifyContent: "center",
 				height: "100vh",
-				fontFamily: "system-ui, sans-serif",
+				fontFamily: "var(--font-family-body)",
+				color: "var(--color-text-primary)",
 			}}
 		>
 			<h1>Oh My VPN</h1>
