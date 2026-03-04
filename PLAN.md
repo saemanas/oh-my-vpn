@@ -1,67 +1,59 @@
 ---
-task: "Tauri IPC Scaffold + AppError"
-milestone: "M1"
-module: "M1.4"
-created_at: "2026-03-04T21:05:00+07:00"
-status: "completed"
-branch: "feature/m1.4-ipc-scaffold"
+task: "CloudProvider Trait + Provider Manager Core"
+milestone: "M2"
+module: "M2.1"
+created_at: "2026-03-04T21:36:00+07:00"
+status: "pending"
+branch: "feature/provider-manager-core"
 ---
 
-> **Status**: Completed at 2026-03-04T21:28:00+07:00
-> **Branch**: feature/m1.4-ipc-scaffold
+> **Status**: Completed at 2026-03-04T21:51:00+07:00
+> **Branch**: feature/provider-manager-core
 
-# Tauri IPC Scaffold + AppError
+# M2.1: CloudProvider Trait + Provider Manager Core
 
 ## 1. Context
 
 ### A. Problem Statement
 
-M1.4는 Tauri IPC 커맨드 스캐폴드와 통합 에러 타입 시스템을 구축한다. 현재 `error.rs`와 `ipc/mod.rs`는 doc comment만 있는 빈 파일이고, `lib.rs`에 `invoke_handler`가 없어 프론트엔드-백엔드 통신이 불가능하다. 이 모듈은 후속 마일스톤(M2, M3, M4, M5, M6)이 IPC 커맨드를 구현할 때 사용하는 기반 구조를 제공한다.
+Provider Manager는 Hetzner, AWS, GCP 3개 클라우드 프로바이더를 단일 인터페이스로 추상화하는 핵심 모듈이다. M2.1은 이 모듈의 뼈대를 구축한다 -- CloudProvider trait 정의, ProviderRegistry (provider 인스턴스 관리), PricingCache (TTL 기반 가격 캐시), 공유 타입 정의.
 
 ### B. Current State
 
-```
-src-tauri/src/
-├── error.rs              ← empty (doc comment only)
-├── ipc/mod.rs            ← empty (doc comment only)
-├── lib.rs                ← module declarations + tray setup, no invoke_handler
-├── keychain_adapter.rs   ← KeychainError defined (Display impl, no Serialize)
-├── preferences_store.rs  ← PreferencesError defined (Display impl, no Serialize)
-├── types.rs              ← Provider enum (Serialize/Deserialize)
-├── provider_manager.rs   ← placeholder
-├── server_lifecycle.rs   ← placeholder
-├── session_tracker.rs    ← placeholder
-└── vpn_manager.rs        ← placeholder
-```
-
-- Tauri 2.10.3, capabilities: `default.json` with `core:default` + `opener:default`
-- No `invoke_handler` registered in `lib.rs`
+- `provider_manager.rs` -- doc comment만 존재 (빈 파일)
+- `types.rs` -- `Provider` enum (Hetzner/Aws/Gcp) + serde + `service_name()` 이미 존재
+- `error.rs` -- `ProviderError` enum + `From<ProviderError> for AppError` 이미 구현
+- `keychain_adapter.rs` -- 완전 구현 (store/retrieve/delete/list)
+- `ipc/provider.rs` -- 4개 IPC stub (NOT_IMPLEMENTED 반환)
+- `Cargo.toml` -- `tokio`와 `async-trait` 미포함
 
 ### C. Constraints
 
-- Tauri v2 IPC commands require error types to implement `Serialize` (`InvokeError: From<T: Serialize>`)
-- All 11 IPC commands from API Design §3 must be scaffolded as stubs
-- Existing `KeychainError` and `PreferencesError` must not be modified (only `From` conversions added in `error.rs`)
-- Must compile with zero warnings on `#[allow(unused)]` modules
+- `provider_manager.rs` 단일 파일 → `provider_manager/` 디렉토리 모듈로 전환 필요
+- `lib.rs`에서 `mod provider_manager`로 이미 참조 중 -- 모듈 전환 시 호환 유지
+- M2.2~M2.4 (개별 provider 구현)에 의존하지 않아야 함 -- trait만 정의
 
 ### D. Input Sources
 
-- API Design §6: AppError format, error code taxonomy, error code catalog, protocol-specific error mapping
-- API Design §3: IPC endpoint summary (11 commands across 4 domains)
-- Architecture containers.md §3.A: Tauri IPC module description
+- API Design §4.F -- CloudProvider trait 정의 (7 async methods, ServerInfo, ServerStatus)
+- API Design §4.A -- 공유 타입 (RegionInfo, ProviderInfo, ProviderStatus)
+- Data Model §4.C -- PricingCache 스키마 (RegionPricing, TTL 3600s)
+- Architecture containers.md §3.B -- Provider Manager 모듈 설명
 
 ### E. Verified Facts
 
-| What was tested | Result | Decision |
-| --- | --- | --- |
-| `AppError` with `#[derive(Serialize)]` as `Result<T, E>` return in `#[tauri::command]` | `cargo check` passed -- Tauri v2 `InvokeError` has `impl<T: Serialize> From<T>` so custom error types need only `Serialize` | Use `#[derive(Debug, Serialize)]` on `AppError`, no need for `std::error::Error` |
-| Current project compilation | `cargo check` passes on tauri 2.10.3 | Baseline is clean |
-| Existing error types | `KeychainError` and `PreferencesError` exist with `Display` but no `Serialize` | Add `From<KeychainError> for AppError` and `From<PreferencesError> for AppError` in `error.rs` -- do not touch original types |
-| Capabilities structure | `src-tauri/capabilities/default.json` exists with `core:default`, `opener:default` | Add IPC command permissions to this file |
+| What | Result |
+| --- | --- |
+| `async-trait v0.1.89` 추가 가능 | `cargo add async-trait --dry-run` 성공 |
+| `Provider` enum이 `Hash` derive | `HashMap<Provider, _>` 키로 사용 가능 확인 |
+| `KeychainAdapter`는 stateless | `retrieve_credential(provider)` → `Option<Credential>` |
+| `lib.rs`에서 `mod provider_manager` 선언 | 디렉토리 모듈 전환 시 `mod.rs` 생성으로 호환 |
 
 ### F. Unverified Assumptions
 
-None -- all technical assumptions verified via compilation spike and source inspection.
+| Assumption | Risk | Fallback |
+| --- | --- | --- |
+| `tokio` time feature로 `Instant` 사용 | Low -- tokio는 Tauri의 표준 async runtime | `std::time::Instant` 사용 (tokio 불필요 시) |
 
 ---
 
@@ -71,131 +63,165 @@ None -- all technical assumptions verified via compilation spike and source insp
 
 ```mermaid
 flowchart TD
-    subgraph error_rs["error.rs"]
-        AppError["AppError<br/>{code, message, details}"]
-        ProviderError["ProviderError enum<br/>9 variants"]
-        FromKC["From&lt;KeychainError&gt; for AppError"]
-        FromPE["From&lt;PreferencesError&gt; for AppError"]
-        FromPV["From&lt;ProviderError&gt; for AppError"]
-    end
-
-    subgraph ipc_mod["ipc/"]
-        mod_rs["mod.rs<br/>re-export all commands"]
-        provider_rs["provider.rs<br/>register_provider<br/>remove_provider<br/>list_providers<br/>list_regions"]
-        server_rs["server.rs<br/>connect<br/>disconnect<br/>check_orphaned_servers<br/>resolve_orphaned_server"]
-        session_rs["session.rs<br/>get_session_status"]
-        preferences_rs["preferences.rs<br/>get_preferences<br/>update_preferences"]
+    subgraph provider_manager["provider_manager/"]
+        mod_rs["mod.rs<br/>(re-exports)"]
+        cloud_provider["cloud_provider.rs<br/>(CloudProvider trait)"]
+        registry["registry.rs<br/>(ProviderRegistry)"]
+        cache["cache.rs<br/>(PricingCache)"]
     end
 
     subgraph existing["existing modules"]
-        KA["keychain_adapter.rs<br/>KeychainError"]
-        PS["preferences_store.rs<br/>PreferencesError"]
+        types["types.rs<br/>(Provider, RegionInfo,<br/>ServerInfo, ServerStatus)"]
+        error["error.rs<br/>(ProviderError)"]
+        keychain["keychain_adapter.rs<br/>(KeychainAdapter)"]
     end
 
-    subgraph lib["lib.rs"]
-        invoke["invoke_handler![11 commands]"]
-    end
-
-    subgraph caps["capabilities/default.json"]
-        perms["core:default + ipc commands"]
-    end
-
-    mod_rs --> provider_rs
-    mod_rs --> server_rs
-    mod_rs --> session_rs
-    mod_rs --> preferences_rs
-    provider_rs --> AppError
-    server_rs --> AppError
-    session_rs --> AppError
-    preferences_rs --> AppError
-    FromKC -.-> KA
-    FromPE -.-> PS
-    lib --> mod_rs
+    cloud_provider -->|"uses"| types
+    cloud_provider -->|"returns"| error
+    registry -->|"stores Box dyn"| cloud_provider
+    registry -->|"reads key"| keychain
+    cache -->|"keyed by"| types
+    mod_rs --> cloud_provider
+    mod_rs --> registry
+    mod_rs --> cache
 ```
 
 ### B. Decisions
 
-| Decision | Choice | Rationale |
-| --- | --- | --- |
-| Domain errors stay in domain modules | `KeychainError` in `keychain_adapter.rs`, `PreferencesError` in `preferences_store.rs` | Single Responsibility -- domain errors belong to their domain module |
-| `ProviderError` defined in `error.rs` | Temporary location until M2 implements `provider_manager` | `provider_manager.rs` is a placeholder -- centralizing in `error.rs` keeps the error catalog in one file. Move to `provider_manager` in M2 |
-| IPC submodules split by domain | 4 files: `provider.rs`, `server.rs`, `session.rs`, `preferences.rs` | Maps 1:1 to API Design §3 interface groups (IPC-PM, IPC-SL, IPC-SS, IPC-PS) |
-| Single `default.json` capability | All IPC commands in one file | Single-window app with no permission differentiation needed |
-| Stub handlers return `NOT_IMPLEMENTED` | `Err(AppError { code: "NOT_IMPLEMENTED", ... })` | Compiles, communicates intent, provides meaningful error to frontend during development |
+1. **Directory module** -- `provider_manager.rs` → `provider_manager/mod.rs` + 3 submodules. Single Responsibility 원칙.
+2. **Shared types in `types.rs`** -- `RegionInfo`, `ServerInfo`, `ServerStatus`, `ProviderInfo`, `ProviderStatus`는 IPC layer에서도 사용. `types.rs`에 배치.
+3. **`async-trait` crate** -- CloudProvider의 7개 async method 지원.
+4. **`std::time::Instant` for TTL** -- PricingCache TTL 체크에 사용. tokio 의존 없이 std만으로 충분.
+5. **`ProviderRegistry`는 `HashMap<Provider, Box<dyn CloudProvider>>`** -- Dependency Inversion. 구체 타입 모름.
+6. **PricingCache stale fallback** -- API 실패 시 expired 데이터 반환 + warning flag.
 
 ### C. Boundaries
 
 | File | Responsibility |
 | --- | --- |
-| `error.rs` | `AppError` struct, `ProviderError` enum, all `From<DomainError>` conversions |
-| `ipc/mod.rs` | Re-export all `#[tauri::command]` functions from submodules |
-| `ipc/provider.rs` | 4 provider management command stubs |
-| `ipc/server.rs` | 4 server lifecycle command stubs (connect, disconnect, orphan detection) |
-| `ipc/session.rs` | 1 session status command stub |
-| `ipc/preferences.rs` | 2 preferences command stubs |
-| `lib.rs` | Register all 11 commands in `invoke_handler` |
-| `capabilities/default.json` | Add IPC command permissions |
+| `cloud_provider.rs` | Trait 정의만 (구현 없음) |
+| `registry.rs` | Provider 등록/조회/제거, API key Keychain 연동 |
+| `cache.rs` | In-memory 가격 캐시, TTL 검사, stale fallback |
+| `types.rs` (기존) | 공유 타입 추가 |
+| `error.rs` (기존) | 변경 없음 (ProviderError 이미 완비) |
 
 ---
 
 ## 3. Steps
 
-### Step 1: AppError + Domain Error Conversions
+### Step 1: Add dependencies and convert to directory module
 
-- [x] **Status**: completed at 2026-03-04T21:18:00+07:00
-- **Scope**: `src-tauri/src/error.rs`
+- [x] **Status**: completed at 2026-03-04T21:47:00+07:00
+- **Scope**: `src-tauri/Cargo.toml`, `src-tauri/src/provider_manager.rs` → `src-tauri/src/provider_manager/mod.rs`
 - **Dependencies**: none
-- **Description**: Define `AppError` struct with `Serialize`, `ProviderError` enum with 9 variants matching API Design §6.D (including `Other(anyhow::Error)` catch-all), and `From<T> for AppError` implementations for `KeychainError`, `PreferencesError`, and `ProviderError`. Cover all 19 error codes from API Design §6.C catalog.
+- **Description**: `async-trait` 크레이트를 Cargo.toml에 추가. `provider_manager.rs`를 삭제하고 `provider_manager/mod.rs`로 전환. `lib.rs`에서 `#[allow(unused)]` 유지.
 - **Acceptance Criteria**:
-  - `AppError` struct with `code: String`, `message: String`, `details: Option<serde_json::Value>` and `#[derive(Debug, Serialize)]`
-  - `ProviderError` enum (9 variants): `AuthInvalidKey(String)`, `AuthInsufficientPermissions(String)`, `RateLimited { retry_after_seconds: u64 }`, `ServerError(String)`, `Timeout`, `NotFound(String)`, `ProvisioningFailed(String)`, `DestructionFailed(String)`, `Other(anyhow::Error)`
-  - `From<KeychainError> for AppError`: `AccessDenied` → `KEYCHAIN_ACCESS_DENIED`, `WriteFailed` → `KEYCHAIN_WRITE_FAILED`, `NotFound` → `NOT_FOUND_PROVIDER`, `SearchFailed` → `INTERNAL_UNEXPECTED`
-  - `From<PreferencesError> for AppError`: all variants → `INTERNAL_UNEXPECTED` with descriptive message
-  - `From<ProviderError> for AppError`: all 8 variants → matching error codes from §6.C
-  - `cargo check` passes
+  - `cargo check` 통과
+  - `provider_manager/mod.rs` 존재, 기존 doc comment 유지
+  - `async-trait` dependency 확인
 
-### Step 2: IPC Command Stubs
+### Step 2: Add shared types to `types.rs`
 
-- [x] **Status**: completed at 2026-03-04T21:23:00+07:00
-- **Scope**: `src-tauri/src/ipc/mod.rs`, `src-tauri/src/ipc/provider.rs`, `src-tauri/src/ipc/server.rs`, `src-tauri/src/ipc/session.rs`, `src-tauri/src/ipc/preferences.rs`
+- [x] **Status**: completed at 2026-03-04T21:48:00+07:00
+- **Scope**: `src-tauri/src/types.rs`
 - **Dependencies**: Step 1
-- **Description**: Create 4 IPC submodules with 11 `#[tauri::command]` stub functions. Each returns `Result<T, AppError>` where T matches API Design §4 return types. All stubs return `Err(AppError { code: "NOT_IMPLEMENTED", ... })`. `mod.rs` re-exports all commands.
+- **Description**: API Design §4.A의 `RegionInfo`, `ProviderInfo`, `ProviderStatus`와 §4.F의 `ServerInfo`, `ServerStatus`를 `types.rs`에 추가. 모두 `Serialize`, `Deserialize` derive. `ServerStatus`는 `Clone`, `PartialEq` 추가.
 - **Acceptance Criteria**:
-  - `provider.rs`: `register_provider(provider: Provider, api_key: String, account_label: String) -> Result<serde_json::Value, AppError>`, `remove_provider(provider: Provider) -> Result<(), AppError>`, `list_providers() -> Result<Vec<serde_json::Value>, AppError>`, `list_regions(provider: Provider) -> Result<Vec<serde_json::Value>, AppError>`
-  - `server.rs`: `connect(provider: Provider, region: String) -> Result<serde_json::Value, AppError>`, `disconnect() -> Result<(), AppError>`, `check_orphaned_servers() -> Result<Vec<serde_json::Value>, AppError>`, `resolve_orphaned_server(server_id: String, action: String) -> Result<Option<serde_json::Value>, AppError>` (note: API Design uses `OrphanAction` enum for `action` but type is not yet defined -- use `String` stub, define `OrphanAction` in `types.rs` during this step)
-  - `session.rs`: `get_session_status() -> Result<Option<serde_json::Value>, AppError>`
-  - `preferences.rs`: `get_preferences() -> Result<serde_json::Value, AppError>`, `update_preferences(preferences: serde_json::Value) -> Result<serde_json::Value, AppError>`
-  - `mod.rs` declares submodules and re-exports all 11 command functions
-  - `cargo check` passes
+  - `RegionInfo` -- region, display_name, instance_type, hourly_cost 필드
+  - `ServerInfo` -- server_id, public_ip, status 필드
+  - `ServerStatus` enum -- Provisioning, Running, Deleting
+  - `ProviderInfo` -- provider, status, account_label 필드
+  - `ProviderStatus` enum -- Valid, Invalid, Unchecked
+  - `cargo check` 통과
 
-### Step 3: lib.rs + Capabilities Integration
+### Step 3: Define CloudProvider trait
 
-- [x] **Status**: completed at 2026-03-04T21:28:00+07:00
-- **Scope**: `src-tauri/src/lib.rs`, `src-tauri/capabilities/default.json`
+- [x] **Status**: completed at 2026-03-04T21:49:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/cloud_provider.rs`, `src-tauri/src/provider_manager/mod.rs`
 - **Dependencies**: Step 2
-- **Description**: Register all 11 IPC commands in `tauri::generate_handler![]` within `lib.rs`. Update `default.json` capabilities to permit the IPC commands. Verify full project compiles and existing tests pass.
+- **Description**: API Design §4.F의 CloudProvider async trait 정의. 7개 메서드 -- `validate_credential`, `list_regions`, `create_ssh_key`, `delete_ssh_key`, `create_server`, `destroy_server`, `get_server`. `Send + Sync` bound. `mod.rs`에서 re-export.
 - **Acceptance Criteria**:
-  - `lib.rs`: `.invoke_handler(tauri::generate_handler![...])` with all 11 commands
-  - `default.json`: permissions array includes IPC command access
-  - `cargo check` passes with zero errors
-  - `cargo test` passes (existing keychain_adapter and preferences_store tests)
+  - `#[async_trait]` 매크로 적용
+  - 모든 메서드가 `&self`와 `api_key: &str` 파라미터 포함
+  - 반환 타입이 `Result<T, ProviderError>`
+  - `mod.rs`에서 `pub use cloud_provider::CloudProvider` 노출
+  - `cargo check` 통과
+
+### Step 4: Implement PricingCache
+
+- [x] **Status**: completed at 2026-03-04T21:49:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/cache.rs`, `src-tauri/src/provider_manager/mod.rs`
+- **Dependencies**: Step 2
+- **Description**: Data Model §4.C의 PricingCache 구현. `HashMap<Provider, CacheEntry>` 구조. CacheEntry에 `regions: Vec<RegionInfo>`, `fetched_at: Instant`, `ttl: Duration` 포함. `get()` -- TTL 미만이면 Some, 초과면 None. `get_stale()` -- TTL 무관하게 반환. `set()` -- 캐시 갱신. `invalidate()` -- 특정 provider 캐시 삭제.
+- **Acceptance Criteria**:
+  - `PricingCache::new()` 생성, default TTL 3600초
+  - `set(provider, regions)` -- 캐시 저장
+  - `get(provider)` -- TTL 내 데이터 반환, 초과 시 None
+  - `get_stale(provider)` -- TTL 무관 반환 (stale fallback용)
+  - `invalidate(provider)` -- 특정 provider 삭제
+  - 단위 테스트: set → get (fresh), TTL 만료 후 get → None, get_stale → Some
+  - `cargo check` 및 `cargo test` 통과
+
+### Step 5: Implement ProviderRegistry
+
+- [x] **Status**: completed at 2026-03-04T21:50:00+07:00
+- **Scope**: `src-tauri/src/provider_manager/registry.rs`, `src-tauri/src/provider_manager/mod.rs`
+- **Dependencies**: Step 3, Step 4
+- **Description**: `ProviderRegistry`는 `HashMap<Provider, Box<dyn CloudProvider>>`로 provider 인스턴스를 관리. `register(provider, impl)` -- 등록. `get(provider)` -- trait object 참조 반환. `remove(provider)` -- 제거. `list()` -- 등록된 provider 목록 반환. PricingCache를 내부에 소유. `mod.rs`에서 re-export.
+- **Acceptance Criteria**:
+  - `ProviderRegistry::new()` 생성
+  - `register(provider, Box<dyn CloudProvider>)` -- provider 등록
+  - `get(provider)` -- `Option<&dyn CloudProvider>` 반환
+  - `remove(provider)` -- 제거 + PricingCache invalidate
+  - `list()` -- `Vec<Provider>` 반환
+  - `cache()` / `cache_mut()` -- PricingCache 접근
+  - API key를 메모리에 캐싱하지 않음 -- 매 호출 시 KeychainAdapter에서 조회
+  - `cargo check` 통과
+
+### Step 6: Verify full compilation and run tests
+
+- [x] **Status**: completed at 2026-03-04T21:51:00+07:00
+- **Scope**: full project
+- **Dependencies**: Step 5
+- **Description**: `cargo check` + `cargo test` 전체 통과. `cargo clippy` 경고 0.
+- **Acceptance Criteria**:
+  - `cargo check` 통과
+  - `cargo test` 통과 (PricingCache 단위 테스트 포함)
+  - `cargo clippy` 경고 없음
 
 ---
 
 ## 4. Execution Strategy
 
-| Step | Chain | Complexity | Rationale |
-| --- | --- | --- | --- |
-| 1 | scout → worker | Simple | Single file, pattern from API Design §6, needs context for error code mapping |
-| 2 | scout → worker | Simple | 4 new files + mod.rs but repetitive pattern, needs Step 1 context |
-| 3 | Direct | Trivial | 2 existing files, registration only |
+| Step | Chain | Rationale |
+| --- | --- | --- |
+| 1 | Direct | Cargo.toml 수정 + 파일 이동, 단순 작업 |
+| 2 | scout → worker | types.rs에 기존 패턴 참고하여 타입 추가 |
+| 3 | scout → worker | API Design 스펙 기반 trait 정의 |
+| 4 | scout → worker → reviewer | 캐시 로직 + 단위 테스트, 정확성 검증 필요 |
+| 5 | scout → worker → reviewer | Registry 설계 + trait object 관리, 리뷰 필요 |
+| 6 | Direct | 최종 검증만 |
 
-**Execution order:**
+### A. Execution Order
 
+```plain
+Step 1 → Step 2 → Step 3 ─┐
+                   Step 4 ─┤ (parallel after Step 2)
+                           └→ Step 5 → Step 6
 ```
-Step 1 → Step 2 → Step 3 (sequential)
-```
 
-**Parallel opportunities:** None -- each step depends on the previous.
+### B. Estimated Complexity
 
-**Risk flags:** None -- all patterns verified via compilation spike.
+| Step | Tier | Tokens |
+| --- | --- | --- |
+| 1 | Trivial | ~5K |
+| 2 | Simple | ~10K |
+| 3 | Simple | ~15K |
+| 4 | Medium | ~25K |
+| 5 | Medium | ~25K |
+| 6 | Trivial | ~5K |
+
+### C. Risk Flags
+
+- **Step 4**: TTL 테스트에서 시간 의존성 -- `std::time::Instant`는 mock 불가. 짧은 TTL (1ms)로 테스트하거나 내부에 `is_expired` 로직을 분리하여 테스트 가능하게 설계.
+- **Step 5**: `Box<dyn CloudProvider>`의 `Send + Sync` bound -- `async-trait`이 자동으로 처리하지만 컴파일 시 확인 필요.
