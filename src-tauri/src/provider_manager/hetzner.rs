@@ -338,12 +338,21 @@ impl CloudProvider for HetznerProvider {
 
         let server_id = create_response.server.id;
 
-        // Poll until server reaches Running status (max 120s, 5s interval)
+        // Poll until server reaches Running status (max 120s, exponential backoff)
+        // Starts at 3s, doubles each iteration, capped at 15s per interval.
         let max_wait = Duration::from_secs(120);
-        let poll_interval = Duration::from_secs(5);
+        let initial_interval_milliseconds: u64 = 3000;
+        let max_interval_milliseconds: u64 = 15000;
         let start = std::time::Instant::now();
+        let mut attempt: u32 = 0;
 
         loop {
+            let backoff_milliseconds = initial_interval_milliseconds
+                .saturating_mul(2u64.saturating_pow(attempt))
+                .min(max_interval_milliseconds);
+            sleep(Duration::from_millis(backoff_milliseconds)).await;
+            attempt += 1;
+
             if start.elapsed() > max_wait {
                 return Err(ProviderError::ProvisioningFailed(format!(
                     "Server {} did not reach Running status within {}s",
@@ -351,8 +360,6 @@ impl CloudProvider for HetznerProvider {
                     max_wait.as_secs()
                 )));
             }
-
-            sleep(poll_interval).await;
 
             let get_response = servers_api::get_server(
                 &config,

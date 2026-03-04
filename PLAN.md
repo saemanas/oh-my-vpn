@@ -57,7 +57,7 @@ Implement the `CloudProvider` trait for Hetzner Cloud using the `hcloud` crate (
 | 8 | Server IP location | `server.public_net.ipv4.ip` (String) | Direct mapping to `ServerInfo.public_ip` |
 | 9 | Server status enum | `Initializing`, `Running`, `Deleting`, `Off`, `Starting`, `Stopping`, `Unknown` | Map `Initializing`/`Starting` → `Provisioning`, `Running` → `Running`, `Deleting` → `Deleting` |
 | 10 | Pricing `price_hourly.gross` format | String `"0.0048000000000000"` | `parse::<f64>()` with fallback to `f64::MAX` for unparseable |
-| 11 | `per_page` pagination | Default returns 25 server types -- CX22/CX23 cut off | Must set `per_page: Some(50)` on `ListServerTypesParams` |
+| 11 | `per_page` pagination | Default returns 25 server types -- CX22/CX23 cut off on `list_server_types` | Not applicable -- implementation uses `pricing_api::list_prices` which returns all types without pagination |
 | 12 | hcloud `Configuration` | `bearer_access_token: Option<String>`, `client: reqwest::Client` | Create new `Configuration` per call with api_key from Keychain |
 
 ### F. Unverified Assumptions
@@ -199,7 +199,7 @@ flowchart TD
   - `create_server(api_key, region, ssh_key_id, cloud_init)`:
     - Resolve `server_type` from `self.region_server_types` cache (populated by `list_regions`). On cache miss, call pricing API inline to populate.
     - Build `CreateServerRequest` with `image: "ubuntu-24.04"`, `name: "oh-my-vpn-{timestamp}"`, `server_type`, `location: region`, `ssh_keys: [ssh_key_id]`, `user_data: cloud_init`, `start_after_create: true`
-    - After Hetzner API returns (server in `Initializing` state), **poll via `get_server` until status reaches `Running`** -- with 5s interval, max 120s timeout (NFR-PERF-1), exponential backoff. On timeout → `ProviderError::ProvisioningFailed`.
+    - After Hetzner API returns (server in `Initializing` state), **poll via `get_server` until status reaches `Running`** -- with exponential backoff (3s initial, 2x multiplier, 15s cap), max 120s timeout (NFR-PERF-1). On timeout → `ProviderError::ProvisioningFailed`.
     - Extract `server.id.to_string()`, `server.public_net.ipv4.ip` from the Running server
     - Return `ServerInfo` with `status: Running`
   - `destroy_server(api_key, server_id)`: parse to `i64`, call `delete_server`
