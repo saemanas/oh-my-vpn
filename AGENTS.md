@@ -52,7 +52,11 @@ Default phase (no tag) is `plan/execution`.
 - [ADR-0007: Tauri Updater with GitHub Releases](docs/adr/0007-tauri-updater-with-github-releases.md)
 - [ADR-0008: Quality Attributes and Fitness Functions](docs/adr/0008-quality-attributes-and-fitness-functions.md)
 
-### F. Reference
+### F. Milestone
+
+<!-- Format: - [{file_name}]({relative_path}) -->
+
+### G. References
 
 <!-- Format: - [{file_name}]({relative_path}) -->
 
