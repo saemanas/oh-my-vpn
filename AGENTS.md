@@ -107,6 +107,8 @@ Every milestone module's acceptance criteria should include automated verificati
 
 ## 3. Project Stack
 
+Verified compatible via `cargo check` and `bun install` on 2026-03-04.
+
 ### A. Runtime
 
 | Layer | Technology | Version |
@@ -119,8 +121,6 @@ Every milestone module's acceptance criteria should include automated verificati
 
 ### B. Backend Crates (Cargo.toml)
 
-#### a. Installed
-
 | Crate | Version | Purpose |
 | --- | --- | --- |
 | `tauri` | 2 | App framework (tray-icon feature) |
@@ -129,21 +129,14 @@ Every milestone module's acceptance criteria should include automated verificati
 | `serde_json` | 1 | JSON parsing |
 | `security-framework` | 3.7 | macOS Keychain access |
 | `core-foundation` | 0.10 | macOS framework bindings |
-
-#### b. Planned (verified compatible)
-
-| Crate | Version | Milestone | Purpose |
-| --- | --- | --- | --- |
-| `tokio` | 1.50 | M2+ | Async runtime |
-| `hcloud` | 0.25 | M2.1 | Hetzner Cloud SDK |
-| `aws-sdk-ec2` | 1.215 | M2.2 | AWS EC2 SDK |
-| `google-cloud-compute-v1` | 2.2 | M2.3 | GCP Compute SDK |
-| `x25519-dalek` | 2.0 | M3.1 | WireGuard key exchange |
-| `ed25519-dalek` | 2.2 | M4.1 | SSH key generation |
-| `zeroize` | 1.8 | M3.1 | Secure memory zeroing |
-| `ssh-key` | 0.6 | M4.1 | SSH key parsing (0.x -- evaluate at M4.1) |
-
-All planned crates were tested together via `cargo check` on 2026-03-04 -- no version conflicts.
+| `tokio` | 1.50 | Async runtime |
+| `hcloud` | 0.25 | Hetzner Cloud SDK |
+| `aws-sdk-ec2` | 1.215 | AWS EC2 SDK |
+| `google-cloud-compute-v1` | 2.2 | GCP Compute SDK |
+| `x25519-dalek` | 2.0 | WireGuard key exchange |
+| `ed25519-dalek` | 2.2 | SSH key generation |
+| `zeroize` | 1.8 | Secure memory zeroing |
+| `ssh-key` | 0.6 | SSH key parsing |
 
 ### C. Frontend Packages (package.json)
 
@@ -152,9 +145,18 @@ All planned crates were tested together via `cargo check` on 2026-03-04 -- no ve
 | `react` / `react-dom` | ^19.1 | UI library |
 | `@tauri-apps/api` | ^2 | Tauri IPC bridge |
 | `@tauri-apps/plugin-opener` | ^2 | Opener plugin JS bindings |
-| `@vitejs/plugin-react` | ^4.6 | Vite React plugin (v5 major available -- evaluate at M5) |
-| `typescript` | ~5.8 | Type checking (5.9 available -- tilde blocks) |
+| `@vitejs/plugin-react` | ^4.6 | Vite React plugin |
+| `typescript` | ~5.8 | Type checking |
 | `vite` | ^7.0 | Build tooling |
 | `@tauri-apps/cli` | ^2 | Tauri CLI |
+
+### D. Stack Change Policy
+
+이 테이블은 프로젝트의 **확정된 의존성 목록**이다. 변경 시 다음을 따른다:
+
+1. **추가** -- crates.io/npm에서 최신 stable 확인 후, 기존 스택과 `cargo check` / `bun install`로 호환성 검증. 통과 시 테이블에 추가
+2. **버전 업그레이드** -- major bump은 ADR 작성. minor/patch는 테이블 버전 업데이트 + 검증
+3. **제거** -- 해당 crate를 참조하는 코드/문서가 없는지 `grep` 확인 후 테이블에서 삭제
+4. **검증 주기** -- 새 마일스톤 착수 시 전체 스택 최신 버전 확인 및 호환성 재검증
 
 ---
