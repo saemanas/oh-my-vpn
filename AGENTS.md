@@ -131,7 +131,10 @@ Verified compatible via `cargo check` and `bun install` on 2026-03-04.
 | `core-foundation` | 0.10 | macOS framework bindings |
 | `tokio` | 1.50 | Async runtime |
 | `hcloud` | 0.25 | Hetzner Cloud SDK |
-| `aws-sdk-ec2` | 1.215 | AWS EC2 SDK |
+| `aws-config` | 1 | AWS SDK shared config + credential loading |
+| `aws-sdk-ec2` | 1 | AWS EC2 SDK |
+| `aws-sdk-pricing` | 1 | AWS Pricing API SDK |
+| `base64` | 0.22 | Base64 encoding (EC2 user-data) |
 | `google-cloud-compute-v1` | 2.2 | GCP Compute SDK |
 | `x25519-dalek` | 2.0 | WireGuard key exchange |
 | `ed25519-dalek` | 2.2 | SSH key generation |
