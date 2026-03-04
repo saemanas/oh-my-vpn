@@ -34,4 +34,7 @@ aws-sdk-pricing = "1"
 base64 = "0.22"
 google-cloud-compute-v1 = { version = "2.2", features = ["firewalls", "machine-types", "zones", "images"] }
 google-cloud-auth = "1.6"
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+zeroize = { version = "1.8", features = ["derive"] }
 
