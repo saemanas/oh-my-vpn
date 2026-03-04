@@ -165,6 +165,7 @@ pub mod codes {
     // Validation
     pub const VALIDATION_INVALID_PROVIDER: &str = "VALIDATION_INVALID_PROVIDER";
     pub const VALIDATION_EMPTY_API_KEY: &str = "VALIDATION_EMPTY_API_KEY";
+    pub const VALIDATION_EMPTY_ACCOUNT_LABEL: &str = "VALIDATION_EMPTY_ACCOUNT_LABEL";
     pub const VALIDATION_INVALID_REGION: &str = "VALIDATION_INVALID_REGION";
 
     // Authentication

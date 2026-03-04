@@ -1,98 +1,57 @@
 ---
-task: "Implement GCP Provider (CloudProvider trait for google-cloud-compute-v1)"
+task: "Provider Manager IPC Commands"
 milestone: "M2"
-module: "M2.4"
+module: "M2.5"
 created_at: "2026-03-04T23:20:00+07:00"
 status: "completed"
-branch: "feat/gcp-provider"
+branch: "feat/provider-ipc-commands"
 ---
 
-> **Status**: Completed at 2026-03-04T23:58:00+07:00
-> **Branch**: feat/gcp-provider
+> **Status**: Completed at 2026-03-05T00:55:00+07:00
+> **Branch**: feat/provider-ipc-commands
 
-# PLAN -- M2.4: GCP Provider
+# Provider Manager IPC Commands
 
 ## 1. Context
 
 ### A. Problem Statement
 
-Implement the GCP cloud provider module (`gcp.rs`) that fulfills the `CloudProvider` trait using the `google-cloud-compute-v1` Rust SDK. This is the third and final provider in M2, following the same trait interface already implemented by Hetzner (`hetzner.rs`) and AWS (`aws.rs`).
+M2.1--M2.4에서 `CloudProvider` trait, `ProviderRegistry`, `PricingCache`, 그리고 3개 provider (Hetzner, AWS, GCP) 구현이 완료되었다. 그러나 이들은 아직 Tauri IPC를 통해 프론트엔드에 노출되지 않는다. `ipc/provider.rs`에 4개의 stub 핸들러가 `NOT_IMPLEMENTED` 에러를 반환하는 상태다.
+
+M2.5는 이 stub들을 실제 구현으로 교체하고, Tauri State로 `ProviderRegistry`를 관리하며, capabilities를 업데이트하는 작업이다.
 
 ### B. Current State
 
-- **CloudProvider trait**: 7 async methods defined in `src-tauri/src/provider_manager/cloud_provider.rs` -- `validate_credential`, `list_regions`, `create_ssh_key`, `delete_ssh_key`, `create_server`, `destroy_server`, `get_server`
-- **Hetzner**: Fully implemented in `hetzner.rs` (~350 lines). Uses `hcloud` crate. Simple API -- bearer token auth, pricing from `/pricing` endpoint, region → cheapest server type cache
-- **AWS**: Fully implemented in `aws.rs` (~600 lines). Uses `aws-sdk-ec2` + `aws-sdk-pricing`. Compound credentials format (`ACCESS_KEY:SECRET_KEY`), deferred SSH key import pattern, compound server_id (`region/instance_id/sg_id`), security group management
-- **Registry**: `ProviderRegistry` in `registry.rs` stores `Box<dyn CloudProvider>` keyed by `Provider` enum (which already has `Provider::Gcp`)
-- **Types**: `RegionInfo`, `ServerInfo`, `ServerStatus`, `Provider` defined in `types.rs`
-- **Errors**: `ProviderError` enum in `error.rs` with all needed variants
-- **mod.rs**: Currently exports `HetznerProvider`, `AwsProvider`, `PricingCache`, `CloudProvider`, `ProviderRegistry` -- needs `GcpProvider` added
+- `ipc/provider.rs` -- 4개 stub: `register_provider`, `remove_provider`, `list_providers`, `list_regions` (모두 `NOT_IMPLEMENTED` 반환)
+- `ipc/mod.rs` -- 이미 4개 함수를 re-export하고 `lib.rs`의 `invoke_handler`에 등록됨
+- `lib.rs` -- `tauri::Builder`에 모든 IPC 핸들러 등록 완료. 그러나 **Tauri State (`manage()`)는 아직 미설정**
+- `ProviderRegistry` -- `HashMap<Provider, Box<dyn CloudProvider>>`로 provider instance 관리 + `PricingCache` 내장
+- `KeychainAdapter` -- stateless struct, static method로 Keychain CRUD
+- `error.rs` -- `AppError`, `ProviderError`, `KeychainError` → `AppError` 변환 모두 구현 완료
+- `types.rs` -- `Provider`, `ProviderInfo`, `ProviderStatus`, `RegionInfo` 모두 정의됨
+- `capabilities/default.json` -- `core:default`, `opener:default`만 있음. Tauri v2 custom command는 별도 capabilities 없이 호출 가능
 
 ### C. Constraints
 
-- Must follow identical trait contract as Hetzner/AWS implementations
-- GCP uses zone-scoped operations (not region-scoped like AWS)
-- GCP SSH keys are managed via project/instance metadata (not key pairs like AWS/Hetzner)
-- GCP firewall rules are network-level (similar to AWS security groups but different API)
-- GCP Compute operations return Long Running Operations (LROs) -- the SDK handles polling internally
-- Service Account JSON stored as single string in Keychain (similar to AWS compound credential pattern)
+- IPC 커맨드에서 `ProviderRegistry`에 접근하려면 `tauri::State<Mutex<ProviderRegistry>>` 패턴 필요
+- `CloudProvider` trait의 모든 메서드는 `api_key` 파라미터를 받음 -- Keychain에서 매번 조회
+- `remove_provider`에서 active session check 필요하나, `SessionTracker`는 아직 stub (M4.1) -- 현재는 TODO 주석으로 표기
+- Tauri v2 custom commands는 `#[tauri::command]` + `invoke_handler` 등록만으로 호출 가능 -- plugin 기반 permission과 다름. Milestone M2.5 scope에 `tauri.conf.json` capabilities update가 포함되어 있으나, custom command는 별도 capability 선언 불필요하므로 skip
 
-### D. Input Sources
+### D. Verified Facts
 
-- Milestone: `docs/milestone/2026-03-04-1726-milestone.md` §M2.4
-- API Design: `docs/api-design/2026-03-04-1726-api-design.md` §4.F (CloudProvider trait)
-- ADR-0002: `docs/adr/0002-use-rust-sdk-for-cloud-providers.md`
-- ADR-0005: `docs/adr/0005-use-provider-pricing-api.md`
-- Cross-cutting: `docs/architecture/cross-cutting-concepts.md` §6.B (cloud-init provider variation)
+1. **프로젝트 컴파일 확인**: `cargo check` 성공 (0.24s)
+2. **Tauri State 패턴**: `app.manage(state)` in setup → 핸들러에서 `state: tauri::State<'_, T>` 파라미터로 접근
+3. **ProviderRegistry API**: `register()`, `get()`, `remove()`, `list()`, `cache()`, `cache_mut()` 메서드 존재
+4. **KeychainAdapter API**: `store_credential()`, `retrieve_credential()`, `delete_credential()`, `list_credentials()` -- 모두 `Result` 반환
+5. **CloudProvider::validate_credential()**: `api_key: &str` → `Result<(), ProviderError>`
+6. **CloudProvider::list_regions()**: `api_key: &str` → `Result<Vec<RegionInfo>, ProviderError>`
+7. **Error 변환 체인**: `ProviderError → AppError`, `KeychainError → AppError` 모두 `From` impl 완료
+8. **Provider implementations**: `HetznerProvider::new()`, `AwsProvider::new()`, `GcpProvider::new()` 존재
 
-### E. Verified Facts
+### E. Unverified Assumptions
 
-1. **Crate availability and compilation**
-   - Tested: `cargo add google-cloud-compute-v1@2.2 google-cloud-auth@1.6` + `cargo check`
-   - Result: Compiles cleanly with features `[firewalls, machine-types, zones, images, instances, projects]`
-   - Decision: Use `google-cloud-compute-v1 = { version = "2.2", features = ["firewalls", "machine-types", "zones", "images"] }` (instances + projects are default features)
-
-2. **Authentication from Service Account JSON**
-   - Tested: docs.rs API for `google-cloud-auth::credentials::service_account::Builder`
-   - Result: `Builder::new(serde_json::Value).build()` creates `Credentials` from JSON directly -- no temp file needed
-   - Decision: Store full Service Account JSON string in Keychain, parse with `serde_json::from_str`, pass to `Builder::new()`
-
-3. **Client initialization with credentials**
-   - Tested: docs.rs API for `ClientBuilder::with_credentials()`
-   - Result: Each client (Instances, Firewalls, MachineTypes, Zones) supports `.builder().with_credentials(creds).build().await`
-   - Decision: Build separate clients per operation, passing credentials each time (no stored state)
-
-4. **Available client types**
-   - Tested: docs.rs module listing for `google_cloud_compute_v1::client`
-   - Result: `Instances` (insert/delete/get/list), `Firewalls` (insert/delete), `MachineTypes` (list), `Zones` (list), `Projects` (get), `Images` (list)
-   - Decision: Use `Instances` for server CRUD, `Firewalls` for firewall rules, `MachineTypes` for pricing, `Zones` for zone listing
-
-5. **Instance operations are LROs**
-   - Tested: docs.rs -- `Instances::insert()` returns an operation, not an instance directly
-   - Result: The `google-cloud-lro` crate handles LRO polling automatically
-   - Decision: Rely on SDK's built-in LRO polling; add manual polling as fallback for status verification
-
-### F. Unverified Assumptions
-
-1. **MachineTypes pricing via `guest_cpus` and zone listing**
-   - Assumption: `MachineTypes::list()` per zone returns `guest_cpus` field that can determine e2-micro, and we can derive hourly cost from the response
-   - Risk: **Medium** -- GCP pricing is complex; MachineTypes may not include hourly cost directly
-   - Fallback: Use hardcoded e2-micro pricing per zone (GCP pricing rarely changes for e2-micro), or use Cloud Billing Catalog API (would need additional crate)
-
-2. **Firewall rule creation API shape**
-   - Assumption: `Firewalls::insert()` accepts a `Firewall` model with `allowed` rules specifying protocol/ports and `source_ranges` for CIDR
-   - Risk: **Low** -- this is standard GCP Compute API, well-documented
-   - Fallback: Use `gcloud` CLI invocation as last resort
-
-3. **SSH key via instance metadata**
-   - Assumption: SSH keys can be set via instance metadata field `ssh-keys` in the `Metadata` struct during `Instances::insert()`
-   - Risk: **Low** -- this is the standard GCP approach for non-OS Login setups
-   - Fallback: Use project-level metadata instead of instance-level
-
-4. **Ubuntu image discovery**
-   - Assumption: `Images::list()` with project `ubuntu-os-cloud` and filter for `ubuntu-2404` returns available images
-   - Risk: **Low** -- canonical approach for GCP image discovery
-   - Fallback: Hardcode the image family `ubuntu-2404-lts-amd64`
+None -- 모든 기술적 가정이 코드베이스 확인으로 검증됨.
 
 ---
 
@@ -101,163 +60,97 @@ Implement the GCP cloud provider module (`gcp.rs`) that fulfills the `CloudProvi
 ### A. Diagram
 
 ```mermaid
-classDiagram
-    class CloudProvider {
-        <<trait>>
-        +validate_credential(api_key) Result~()~
-        +list_regions(api_key) Result~Vec~RegionInfo~~
-        +create_ssh_key(api_key, public_key, label) Result~String~
-        +delete_ssh_key(api_key, key_id) Result~()~
-        +create_server(api_key, region, ssh_key_id, cloud_init) Result~ServerInfo~
-        +destroy_server(api_key, server_id) Result~()~
-        +get_server(api_key, server_id) Result~Option~ServerInfo~~
-    }
+sequenceDiagram
+    participant UI as Menu Bar UI
+    participant IPC as ipc/provider.rs
+    participant REG as ProviderRegistry<br/>(Tauri State)
+    participant KA as KeychainAdapter
+    participant CP as CloudProvider
+    participant Cache as PricingCache
 
-    class GcpProvider {
-        -zone_machine_types: Arc~RwLock~HashMap~~
-        -pending_ssh_key: Arc~RwLock~Option~~
-        +new() GcpProvider
-    }
+    Note over IPC,REG: register_provider
+    UI->>IPC: invoke("register_provider", {provider, apiKey, accountLabel})
+    IPC->>REG: get(provider) → CloudProvider
+    REG-->>IPC: &dyn CloudProvider
+    IPC->>CP: validate_credential(apiKey)
+    CP-->>IPC: Ok(())
+    IPC->>KA: store_credential(provider, accountLabel, apiKey)
+    KA-->>IPC: Ok(())
+    IPC->>Cache: invalidate(provider)
+    IPC-->>UI: ProviderInfo { status: Valid }
 
-    class HetznerProvider {
-        -region_server_types: Arc~RwLock~HashMap~~
-    }
-
-    class AwsProvider {
-        -region_instance_types: Arc~RwLock~HashMap~~
-        -pending_ssh_key: Arc~RwLock~Option~~
-        -ami_cache: Arc~RwLock~HashMap~~
-    }
-
-    CloudProvider <|.. GcpProvider
-    CloudProvider <|.. HetznerProvider
-    CloudProvider <|.. AwsProvider
+    Note over IPC,REG: list_regions
+    UI->>IPC: invoke("list_regions", {provider})
+    IPC->>Cache: get(provider)
+    alt Cache hit
+        Cache-->>IPC: &[RegionInfo]
+    else Cache miss
+        IPC->>KA: retrieve_credential(provider)
+        KA-->>IPC: Credential { apiKey }
+        IPC->>CP: list_regions(apiKey)
+        CP-->>IPC: Vec<RegionInfo>
+        IPC->>Cache: set(provider, regions)
+    end
+    IPC-->>UI: Vec<RegionInfo>
 ```
 
 ### B. Decisions
 
-1. **Deferred SSH key pattern** (same as AWS): `create_ssh_key` caches key material internally; actual metadata injection happens in `create_server` where the zone is known. Returns `pending/{label}` synthetic ID.
-   - Rationale: The trait's `create_ssh_key` has no zone parameter, but GCP SSH keys are injected as instance metadata at creation time. (Principle: Composition over Inheritance -- reuse the same pattern AWS established)
-
-2. **Compound server_id**: `{project_id}/{zone}/{instance_name}/{firewall_name}`
-   - Rationale: GCP operations require project + zone + instance name. Firewall name needed for cleanup. Same pattern as AWS's `region/instance_id/sg_id`. (Principle: Explicit over Implicit)
-
-3. **Compound key_id**: `pending/{label}` or `{project_id}/{zone}/{label}` (after injection)
-   - Rationale: SSH keys are instance metadata in GCP -- "deletion" means the instance is destroyed. Pending keys clear internal cache.
-
-4. **Credentials format**: Full Service Account JSON string stored in Keychain
-   - Rationale: GCP Service Account JSON contains project_id, client_email, and private_key -- all needed for authentication. Stored as single string, parsed per call. (Principle: Fail Fast -- parse validates JSON structure)
-
-5. **Zone-based regions**: List zones (not regions) as the selectable unit, since GCP pricing varies per zone
-   - Rationale: GCP machine type availability and pricing are zone-specific. Displaying zones gives accurate pricing. Display format: `us-central1-a` → `Iowa, US (us-central1-a)`
-
-6. **e2-micro as default instance type**: Hardcode `e2-micro` for MVP (cheapest general-purpose)
-   - Rationale: Unlike Hetzner (which discovers cheapest via pricing API) or AWS (fixed t3.nano), GCP's cheapest varies less. e2-micro is free-tier eligible and available in all zones. Pricing can be fetched from MachineTypes API.
+1. **Tauri State로 `ProviderRegistry` 관리** -- `app.manage(tokio::sync::Mutex<ProviderRegistry>)`로 설정. IPC 핸들러에서 `State<'_, tokio::sync::Mutex<ProviderRegistry>>`로 접근. tokio Mutex 사용 이유: `CloudProvider` 메서드가 async이므로 lock을 await 사이에 유지해야 함. (Principle: Explicit over Implicit)
+2. **3개 provider를 app startup 시 registry에 등록** -- `ProviderRegistry`에 `HetznerProvider`, `AwsProvider`, `GcpProvider` trait object를 미리 등록. Keychain에 credential이 없어도 trait object는 존재. (Principle: Fail Fast)
+3. **`list_providers`는 Keychain 기준** -- `KeychainAdapter::list_credentials()`로 등록된 provider 목록 조회. status는 `Valid` (등록 시 이미 validate 통과). (API Design §4.B)
+4. **Input validation을 IPC boundary에서 수행** -- api_key 빈 문자열 → `VALIDATION_EMPTY_API_KEY`. (Principle: Fail Fast)
+5. **`list_regions` stale fallback** -- cache miss + API failure 시 stale cache 반환. stale cache도 없으면 에러. (API Design §4.B `list_regions` behavior)
 
 ### C. Boundaries
 
-| Scope | Responsibility |
+| File | Responsibility |
 | --- | --- |
-| `src-tauri/src/provider_manager/gcp.rs` | All GCP CloudProvider implementation, helpers, unit tests, integration tests |
-| `src-tauri/src/provider_manager/mod.rs` | Add `mod gcp;` and `pub use gcp::GcpProvider;` |
-| `src-tauri/Cargo.toml` | Add `google-cloud-compute-v1` and `google-cloud-auth` dependencies |
-
-### D. Trade-offs
-
-- **MachineTypes API vs Cloud Billing API for pricing**: MachineTypes may not include direct hourly USD cost. Cloud Billing requires a separate crate. Decision: try MachineTypes first; if no pricing data, use hardcoded e2-micro prices as fallback (ADR-0005 prefers API but accepts cache/fallback).
-- **Instance-level vs project-level SSH metadata**: Instance-level is cleaner (no side effects on other instances) but requires setting metadata at creation time. Decision: instance-level (aligns with ephemeral pattern in ADR-0004).
+| `lib.rs` | ProviderRegistry 초기화 + 3개 provider 등록 + `app.manage()` |
+| `ipc/provider.rs` | IPC 핸들러 4개 -- validation, state 접근, domain 호출, 에러 변환 |
 
 ---
 
 ## 3. Steps
 
-### Step 1: Add dependencies to Cargo.toml
+### Step 1: ProviderRegistry Tauri State 설정
 
-- [x] **Status**: completed at 2026-03-04T23:22:00+07:00
-- **Scope**: `src-tauri/Cargo.toml`
+- [x] **Status**: completed at 2026-03-05T00:52:00+07:00
+- **Scope**: `src-tauri/src/lib.rs`
 - **Dependencies**: none
-- **Description**: Add `google-cloud-compute-v1` and `google-cloud-auth` crates with required features. Run `cargo check` to verify compilation.
+- **Description**: `ProviderRegistry`를 생성하고 3개 provider (Hetzner, AWS, GCP) 인스턴스를 등록한 후, `app.manage(tokio::sync::Mutex<ProviderRegistry>)`로 Tauri State에 설정한다.
 - **Acceptance Criteria**:
-  - `google-cloud-compute-v1 = { version = "2.2", features = ["firewalls", "machine-types", "zones", "images"] }` in Cargo.toml
-  - `google-cloud-auth = "1.6"` in Cargo.toml
-  - `cargo check` passes
+  - `lib.rs`의 `setup()` 클로저 안에서 `ProviderRegistry::new()` 호출
+  - `registry.register(Provider::Hetzner, Box::new(HetznerProvider::new()))` 등 3개
+  - `app.manage(tokio::sync::Mutex::new(registry))`
+  - `provider_manager` 모듈의 `#[allow(unused)]` 제거
+  - `cargo check` 통과
 
-### Step 2: Implement GcpProvider struct and helpers
+### Step 2: 4개 IPC 핸들러 구현
 
-- [x] **Status**: completed at 2026-03-04T23:25:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/gcp.rs`, `src-tauri/src/provider_manager/mod.rs`
+- [x] **Status**: completed at 2026-03-05T00:53:00+07:00
+- **Scope**: `src-tauri/src/ipc/provider.rs`
 - **Dependencies**: Step 1
-- **Description**: Create `gcp.rs` with `GcpProvider` struct, credential parsing helper (Service Account JSON → `Credentials`), client builder helpers, error mapping (`google-cloud-gax` errors → `ProviderError`), zone display name mapper, compound ID parsers, and server status mapper. Register module in `mod.rs`.
+- **Description**: 4개 stub을 실제 구현으로 교체. Tauri State에서 `ProviderRegistry` 접근, KeychainAdapter 호출, validation 수행.
 - **Acceptance Criteria**:
-  - `GcpProvider` struct with `zone_machine_types: Arc<RwLock<HashMap<String, String>>>` and `pending_ssh_key: Arc<RwLock<Option<PendingSshKey>>>`
-  - `parse_gcp_credentials(api_key: &str) -> Result<(serde_json::Value, String), ProviderError>` -- parses JSON, extracts project_id
-  - `build_credentials(sa_json: &serde_json::Value) -> Result<Credentials, ProviderError>` -- builds auth credentials
-  - `map_gcp_error<T: Debug>(error: T) -> ProviderError` -- maps SDK errors to ProviderError
-  - `parse_compound_server_id` / `parse_compound_key_id` helpers
-  - `get_zone_display_name(zone: &str) -> String` -- human-readable zone names
-  - `mod.rs` updated with `mod gcp;` and `pub use gcp::GcpProvider;`
-  - `cargo check` passes
+  - `register_provider`: validate input (api_key + account_label empty check) → `registry.get(provider)` → `validate_credential(api_key)` → `KeychainAdapter::store_credential()` → `registry.cache_mut().invalidate()` → return `ProviderInfo { status: Valid }`
+  - `remove_provider`: TODO session active check (return `CONFLICT_PROVIDER_IN_USE` when SessionTracker is implemented in M4) → `KeychainAdapter::delete_credential()` → `registry.cache_mut().invalidate()` → `Ok(())`
+  - `list_providers`: `KeychainAdapter::list_credentials()` → map to `Vec<ProviderInfo>` with status `Valid`
+  - `list_regions`: cache hit → return clone. cache miss → `KeychainAdapter::retrieve_credential()` → `CloudProvider::list_regions()` → sort by hourly_cost → cache set → return. API failure + stale cache → return stale
+  - 반환 타입을 `serde_json::Value`에서 concrete type으로 변경: `ProviderInfo`, `Vec<ProviderInfo>`, `Vec<RegionInfo>`
+  - Error codes match API Design §6.C: `VALIDATION_EMPTY_API_KEY` (empty api_key or account_label), `NOT_FOUND_PROVIDER` (unregistered provider), `AUTH_INVALID_KEY` / `AUTH_INSUFFICIENT_PERMISSIONS` (validation failure), `CONFLICT_PROVIDER_IN_USE` (TODO -- M4 dependency), `KEYCHAIN_*` (Keychain errors via From impl), `PROVIDER_*` (SDK errors via From impl)
+  - `cargo check` 통과
 
-### Step 3: Implement validate_credential and list_regions
+### Step 3: 컴파일 검증 및 정리
 
-- [x] **Status**: completed at 2026-03-04T23:32:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
+- [x] **Status**: completed at 2026-03-05T00:55:00+07:00
+- **Scope**: `src-tauri/src/lib.rs`, `src-tauri/src/ipc/provider.rs`
 - **Dependencies**: Step 2
-- **Description**: Implement `validate_credential` (call `Projects::get` or `Instances::list` to verify API key) and `list_regions` (list zones, query MachineTypes per zone for e2-micro pricing, populate zone_machine_types cache).
+- **Description**: `cargo check` + `cargo clippy` 실행. unused import/allow 정리.
 - **Acceptance Criteria**:
-  - `validate_credential`: parses SA JSON, builds credentials, calls GCP API to verify access
-  - `list_regions`: returns zones with e2-micro hourly cost, sorted ascending
-  - Zone-to-machine-type cache populated during `list_regions`
-  - Unit tests for credential parsing and zone display names
-
-### Step 4: Implement SSH key management (create_ssh_key, delete_ssh_key)
-
-- [x] **Status**: completed at 2026-03-04T23:35:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
-- **Dependencies**: Step 2
-- **Description**: Implement deferred SSH key pattern -- `create_ssh_key` caches key material (same as AWS pattern), `delete_ssh_key` clears cache for pending keys.
-- **Acceptance Criteria**:
-  - `create_ssh_key` returns `pending/{label}` and caches public key material
-  - `delete_ssh_key` with `pending/` prefix clears internal cache without API call
-  - Unit tests verify pending key cache behavior
-
-### Step 5: Implement create_server
-
-- [x] **Status**: completed at 2026-03-04T23:48:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
-- **Dependencies**: Step 3, Step 4
-- **Description**: Implement full server provisioning flow: parse SA JSON → build credentials → create firewall rule (WireGuard UDP 51820) → resolve Ubuntu image → insert instance with startup-script metadata and SSH key metadata → poll until RUNNING → return ServerInfo with compound ID.
-- **Acceptance Criteria**:
-  - Creates firewall rule allowing UDP 51820 from 0.0.0.0/0
-  - Resolves latest Ubuntu 24.04 image from `ubuntu-os-cloud` project
-  - Instance created with e2-micro type, startup-script metadata (cloud_init), SSH key in metadata
-  - Polls instance until RUNNING status (max 120s)
-  - Returns `ServerInfo` with compound ID `{project_id}/{zone}/{instance_name}/{firewall_name}`
-  - Cleanup on failure: delete firewall if created, delete instance if created
-  - Instance named `oh-my-vpn-{timestamp}`, firewall named `oh-my-vpn-{timestamp}`
-
-### Step 6: Implement destroy_server and get_server
-
-- [x] **Status**: completed at 2026-03-04T23:53:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
-- **Dependencies**: Step 2
-- **Description**: Implement `destroy_server` (delete instance + delete firewall rule) and `get_server` (check instance existence and status).
-- **Acceptance Criteria**:
-  - `destroy_server`: deletes instance, then deletes firewall rule (best-effort with retries)
-  - `get_server`: returns `Some(ServerInfo)` if instance exists, `None` if not found (TERMINATED treated as None)
-  - Compound server_id parsed correctly for all operations
-
-### Step 7: Integration tests and final verification
-
-- [x] **Status**: completed at 2026-03-04T23:58:00+07:00
-- **Scope**: `src-tauri/src/provider_manager/gcp.rs`
-- **Dependencies**: Step 5, Step 6
-- **Description**: Add `#[ignore]` integration tests gated by `GCP_TEST_CREDENTIALS` env var. Run `cargo check`, `cargo test` (unit tests only), `cargo clippy`.
-- **Acceptance Criteria**:
-  - Integration tests: `test_validate_credential_valid`, `test_validate_credential_invalid`, `test_list_regions`, `test_server_create_destroy`
-  - All unit tests pass with `cargo test`
-  - `cargo clippy` passes with no warnings
-  - `cargo check` passes
+  - `cargo check` 성공
+  - `cargo clippy` warning 최소화
+  - 불필요한 `#[allow(unused)]` 제거
 
 ---
 
@@ -265,41 +158,14 @@ classDiagram
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Single config file change |
-| 2 | scout → worker | Scaffolding needs codebase context for consistent patterns |
-| 3 | scout → worker | SDK API research needed + implementation |
-| 4 | Direct | Small, follows established AWS pattern exactly |
-| 5 | scout → worker → reviewer | Most complex step -- server provisioning with cleanup logic |
-| 6 | scout → worker | Moderate complexity, follows existing patterns |
-| 7 | Direct | Test writing + verification commands |
+| 1 | Direct | 단일 파일, state 설정만 추가 |
+| 2 | Direct | 단일 파일, stub → 구현 교체. 모든 context가 PLAN.md에 완비 |
+| 3 | Direct | 검증 + 정리 |
 
-### A. Execution Order
+**Execution order**: Step 1 → Step 2 → Step 3 (순차)
 
-```plain
-Step 1 → Step 2 → Step 3 → Step 4 → Step 5 → Step 6 → Step 7
-```
+**Single-file constraint note**: Step 1과 Step 3이 `lib.rs`를 공유하지만, Step 1은 초기화 추가, Step 3은 정리만이므로 Sequential Direct.
 
-All sequential -- single file constraint (`gcp.rs`) makes parallel execution impractical. Steps 3 and 4 could theoretically be parallel but share the same file.
+**Estimated complexity**: Simple (2 파일 수정, 명확한 API 계약)
 
-### B. Estimated Complexity
-
-| Step | Tier | Est. Lines |
-| --- | --- | --- |
-| 1 | Trivial | ~3 |
-| 2 | Medium | ~120 |
-| 3 | Medium | ~100 |
-| 4 | Simple | ~40 |
-| 5 | Complex | ~200 |
-| 6 | Medium | ~80 |
-| 7 | Simple | ~100 |
-
-Total: ~640 lines in `gcp.rs` (comparable to AWS's ~600 lines)
-
-### C. Risk Flags
-
-- **Step 3 (list_regions)**: GCP pricing from MachineTypes API may not include hourly cost directly. May need fallback to hardcoded prices or Cloud Billing API.
-- **Step 5 (create_server)**: LRO handling for instance creation -- SDK should handle this but may need manual polling. Metadata format for SSH keys and startup-script needs exact field names.
-
-### D. Single-File Constraint
-
-Steps 2--7 all modify `gcp.rs`. Resolution: **Sequential Direct** -- steps have distinct acceptance criteria and build incrementally. Each step appends to the file without conflicting with previous steps.
+**Risk flags**: None
