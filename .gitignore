@@ -95,3 +95,6 @@ PLAN.md
 .playwright-cli/
 .pi/
 tmp/
+# ─── Rust ─────────────────────────────────────────────────────────────────────
+target/
+Cargo.lock
