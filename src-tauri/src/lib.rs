@@ -12,7 +12,7 @@ pub mod tray;
 #[allow(unused)]
 mod vpn_manager;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager, RunEvent};
 
 use provider_manager::{AwsProvider, GcpProvider, HetznerProvider, ProviderRegistry};
 use server_lifecycle::ServerLifecycle;
@@ -41,7 +41,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Focused(false) = event {
-                let _ = window.hide();
+                if !tray::QUIT_PENDING.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -56,7 +58,31 @@ pub fn run() {
             ipc::session::get_session_status,
             ipc::preferences::get_preferences,
             ipc::preferences::update_preferences,
+            ipc::app::quit_app,
+            ipc::app::cancel_quit,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, .. } = &event {
+                let lifecycle = app.state::<ServerLifecycle>();
+                let has_session = lifecycle
+                    .session_tracker
+                    .read_session()
+                    .ok()
+                    .flatten()
+                    .is_some();
+
+                if has_session {
+                    api.prevent_exit();
+                    tray::QUIT_PENDING.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                    let _ = app.emit("quit-requested", ());
+                }
+            }
+        });
 }

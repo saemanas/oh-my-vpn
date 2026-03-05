@@ -16,6 +16,8 @@
     "allow-resolve-orphaned-server",
     "allow-get-session-status",
     "allow-get-preferences",
-    "allow-update-preferences"
+    "allow-update-preferences",
+    "allow-quit-app",
+    "allow-cancel-quit"
   ]
 }
