@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::keychain_adapter::KeychainError;
 use crate::preferences_store::PreferencesError;
+use crate::server_lifecycle::LifecycleError;
 use crate::session_tracker::SessionError;
 
 // ── AppError ────────────────────────────────────────────────────────────────
@@ -172,6 +173,56 @@ impl From<SessionError> for AppError {
     fn from(error: SessionError) -> Self {
         let message = error.to_string();
         AppError::new(codes::INTERNAL_UNEXPECTED, message, None)
+    }
+}
+
+// ── From<LifecycleError> for AppError ────────────────────────────────────────
+
+impl From<LifecycleError> for AppError {
+    fn from(error: LifecycleError) -> Self {
+        match error {
+            LifecycleError::SessionActive => AppError::new(
+                codes::CONFLICT_SESSION_ACTIVE,
+                error.to_string(),
+                None,
+            ),
+            LifecycleError::ProviderNotRegistered(msg) => AppError::new(
+                codes::NOT_FOUND_PROVIDER,
+                msg,
+                None,
+            ),
+            LifecycleError::KeychainFailed(msg) => AppError::new(
+                codes::KEYCHAIN_ACCESS_DENIED,
+                msg,
+                None,
+            ),
+            LifecycleError::SshKeyGenerationFailed(msg) => AppError::new(
+                codes::INTERNAL_UNEXPECTED,
+                msg,
+                None,
+            ),
+            LifecycleError::SshKeyRegistrationFailed(msg) => AppError::new(
+                codes::PROVIDER_PROVISIONING_FAILED,
+                msg,
+                None,
+            ),
+            LifecycleError::ProvisioningFailed(msg) => AppError::new(
+                codes::PROVIDER_PROVISIONING_FAILED,
+                msg,
+                None,
+            ),
+            LifecycleError::TunnelFailed(msg) => AppError::new(
+                codes::TUNNEL_SETUP_FAILED,
+                msg,
+                None,
+            ),
+            LifecycleError::PersistenceFailed(msg) => AppError::new(
+                codes::INTERNAL_UNEXPECTED,
+                msg,
+                None,
+            ),
+            LifecycleError::Provider(provider_error) => AppError::from(provider_error),
+        }
     }
 }
 

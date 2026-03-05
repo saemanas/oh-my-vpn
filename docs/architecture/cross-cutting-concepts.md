@@ -15,9 +15,11 @@ flowchart LR
     tauri -->|store key| adapter[Keychain Adapter]
     adapter -->|write| keychain[(macOS Keychain)]
 
-    provider[Provider Manager] -->|read key| adapter
+    lifecycle[Server Lifecycle] -->|read key| adapter
     adapter -->|retrieve| keychain
 ```
+
+> **Note**: Server Lifecycle retrieves API keys directly from Keychain Adapter, then passes them to CloudProvider trait methods as `api_key: &str`. Provider Manager does not mediate credential access -- each CloudProvider method receives the key from its caller.
 
 ### A. Rules
 

@@ -5,7 +5,6 @@ pub(crate) mod keychain_adapter;
 #[allow(unused)]
 mod preferences_store;
 mod provider_manager;
-#[allow(unused)]
 mod server_lifecycle;
 #[allow(unused)]
 mod session_tracker;
@@ -19,6 +18,7 @@ use tauri::{
 };
 
 use provider_manager::{AwsProvider, GcpProvider, HetznerProvider, ProviderRegistry};
+use server_lifecycle::ServerLifecycle;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,6 +31,11 @@ pub fn run() {
             registry.register(types::Provider::Aws, Box::new(AwsProvider::new()));
             registry.register(types::Provider::Gcp, Box::new(GcpProvider::new()));
             app.manage(tokio::sync::Mutex::new(registry));
+
+            // Initialize ServerLifecycle with app data directory.
+            let data_dir = app.path().app_data_dir()
+                .expect("app data directory should be resolvable");
+            app.manage(ServerLifecycle::new(data_dir));
 
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit_item])?;

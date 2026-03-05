@@ -3,7 +3,12 @@
 //! Covers VPN tunnel connect/disconnect and orphaned server detection
 //! and resolution.
 
-use crate::error::AppError;
+use tokio::sync::Mutex;
+
+use crate::error::{codes, AppError};
+use crate::provider_manager::ProviderRegistry;
+use crate::server_lifecycle::ServerLifecycle;
+use crate::session_tracker::SessionStatus;
 use crate::types::Provider;
 
 /// Provision a VPN server on the given provider and region, then bring up the
@@ -12,15 +17,38 @@ use crate::types::Provider;
 /// Returns a `SessionStatus` JSON object on success.
 #[tauri::command]
 pub async fn connect(
+    lifecycle: tauri::State<'_, ServerLifecycle>,
+    registry: tauri::State<'_, Mutex<ProviderRegistry>>,
     provider: Provider,
     region: String,
-) -> Result<serde_json::Value, AppError> {
-    let _ = (provider, region);
-    Err(AppError::new(
-        "NOT_IMPLEMENTED",
-        "connect is not yet implemented",
-        None,
-    ))
+) -> Result<SessionStatus, AppError> {
+    // Input validation: verify provider is registered in registry.
+    {
+        let reg = registry.lock().await;
+        if reg.get(&provider).is_none() {
+            return Err(AppError::new(
+                codes::NOT_FOUND_PROVIDER,
+                format!("Provider {provider} is not registered"),
+                None,
+            ));
+        }
+    }
+
+    // Check for active session before proceeding.
+    if lifecycle.session_tracker.read_session()
+        .map_err(|e| AppError::new(codes::INTERNAL_UNEXPECTED, e.to_string(), None))?
+        .is_some()
+    {
+        return Err(AppError::new(
+            codes::CONFLICT_SESSION_ACTIVE,
+            "An active session already exists",
+            None,
+        ));
+    }
+
+    // Delegate to ServerLifecycle::connect().
+    let status = lifecycle.connect(provider, &region, registry.inner()).await?;
+    Ok(status)
 }
 
 /// Tear down the active WireGuard tunnel and destroy the remote server.
