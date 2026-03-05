@@ -87,7 +87,47 @@ Default phase (no tag) is `plan/execution`.
 
 ---
 
-## 2. Verification Strategy
+## 2. Dev Commands
+
+### A. Run
+
+| Command | Description |
+| --- | --- |
+| `bun run tauri dev` | Start dev server (Vite + Rust backend). First build compiles ~567 crates (~2--3 min). Subsequent runs use cache and start in seconds. |
+| `bun run dev` | Start Vite frontend only (no Tauri window, browser at `http://localhost:1420`) |
+
+### B. Build
+
+| Command | Description |
+| --- | --- |
+| `bun run tauri build` | Production build -- outputs `.dmg` / `.app` in `src-tauri/target/release/bundle/` |
+| `bun run build` | Frontend-only production build (TypeScript check + Vite bundle) |
+
+### C. Check
+
+| Command | Description |
+| --- | --- |
+| `cargo check --manifest-path src-tauri/Cargo.toml` | Type-check Rust backend without full compilation |
+| `cargo clippy --manifest-path src-tauri/Cargo.toml` | Lint Rust backend |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | Run Rust unit/integration tests |
+| `bun run check` | TypeScript type check (frontend) |
+
+### D. Clean
+
+| Command | Description |
+| --- | --- |
+| `cargo clean --manifest-path src-tauri/Cargo.toml` | Remove Rust build cache (`src-tauri/target/`). Forces full recompile on next run. |
+| `rm -rf node_modules && bun install` | Reset frontend dependencies |
+
+### E. Notes
+
+- **First build** is slow due to crate compilation. After that, incremental builds are fast (~5--10s for Rust changes).
+- **Hot reload**: Vite handles frontend HMR automatically. Rust changes trigger a recompile + app restart.
+- **Background run**: Append `&` to run in background (e.g., `bun run tauri dev &`). Stop with `pkill -f "tauri dev"`.
+
+---
+
+## 3. Verification Strategy
 
 Every milestone module's acceptance criteria should include automated verification where feasible.
 
@@ -105,7 +145,7 @@ Every milestone module's acceptance criteria should include automated verificati
 
 ---
 
-## 3. Project Stack
+## 4. Project Stack
 
 Verified compatible via `cargo check` and `bun install` on 2026-03-04.
 
