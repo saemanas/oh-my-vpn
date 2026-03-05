@@ -1,204 +1,239 @@
 ---
-task: "Implement Session Tracker module"
+task: "Server Lifecycle -- Connect Flow"
 milestone: "M4"
-module: "M4.1"
-created_at: "2026-03-05T12:27:00+07:00"
+module: "M4.2"
+created_at: "2026-03-05T12:45:00+07:00"
 status: "completed"
-branch: "feat/session-tracker"
+branch: "feat/server-lifecycle-connect"
 ---
 
-> **Status**: Completed at 2026-03-05T12:30:00+07:00
-> **Branch**: feat/session-tracker
+> **Status**: Completed at 2026-03-05T13:22:00+07:00
+> **Branch**: feat/server-lifecycle-connect
 
-# PLAN -- M4.1 Session Tracker
+# PLAN.md -- M4.2: Server Lifecycle -- Connect Flow
 
 ## 1. Context
 
 ### A. Problem Statement
 
-M4 (Server Lifecycle + Session Tracker) requires a Session Tracker module to persist active VPN session state. This module enables:
-
-- Orphaned server detection on app launch (NFR-REL-1)
-- Session status display in the UI (FR-SS-1, FR-SS-2)
-- Crash recovery -- session file survives app crashes (NFR-REL-4)
+Implement the 11-step connect flow that orchestrates Provider Manager, VPN Manager, Session Tracker, and Preferences Store to provision a cloud server with WireGuard and establish a VPN tunnel. This is the core user action -- "click Connect, get VPN."
 
 ### B. Current State
 
-- `session_tracker.rs` exists as an empty stub (4-line doc comment only)
-- `lib.rs` already registers `mod session_tracker` with `#[allow(unused)]`
-- `PreferencesStore` in `preferences_store.rs` provides a proven pattern: `PathBuf`-based constructor, atomic write (tmp + rename), serde JSON serialization
-- `types.rs` defines `Provider` enum (reused by ActiveSession)
-- `error.rs` has error code constants `NOT_FOUND_SESSION` and `CONFLICT_SESSION_ACTIVE` but no `SessionError` enum
-- IPC stubs in `ipc/session.rs` and `ipc/server.rs` return `NOT_IMPLEMENTED`
+- `server_lifecycle.rs` exists as an empty stub (doc comments only)
+- `ipc/server.rs::connect` returns `NOT_IMPLEMENTED`
+- All dependencies are implemented: ProviderRegistry (M2), VPN Manager tunnel_up/tunnel_down (M3), SessionTracker (M4.1), PreferencesStore (M1.3), KeychainAdapter (M1.2)
+- `ed25519-dalek` and `ssh-key` crates are NOT in Cargo.toml yet -- needed for SSH key generation
 
 ### C. Constraints
 
-- No `chrono` crate in current dependencies -- required for ISO 8601 datetime parsing and elapsed time calculation
-- ActiveSession is a singleton file (only one VPN session at a time)
-- Atomic writes mandatory (write tmp + rename) to prevent partial state on crash
-- `server_ip` field needed in ActiveSession (not in data model schema but required by `SessionStatus` return type)
+- `tunnel_up` currently generates WireGuard key pair internally -- must be refactored to accept pre-generated key pair (cloud-init needs client public key before provisioning)
+- Server Lifecycle generates BOTH WG key pairs (client + server) so cloud-init can embed server private key and client public key
+- Auto-cleanup required on any failure mid-connect (FR-SL-4)
+- All provider API calls require API key from Keychain -- never cached in memory
 
-### D. Input Sources
+### D. Verified Facts
 
-- Data model §4.B: ActiveSession schema, §5.B: access patterns
-- API design §4.A: `SessionStatus` type definition, §4.D: `get_session_status` command
-- Architecture containers.md §3.E: Session Tracker module description
-
-### E. Verified Facts
-
-| What was tested | Result | Decision |
+| # | Fact | Evidence |
 | --- | --- | --- |
-| `cargo check` in `src-tauri/` | Compiles with 36 warnings, 0 errors | Codebase is healthy, safe to add module |
-| `cargo add chrono --features serde --dry-run` | Resolves chrono v0.4.44 successfully | chrono is compatible with current dependency tree |
-| PreferencesStore pattern review | Atomic write (tmp + rename), PathBuf constructor, serde JSON -- well-tested | Follow same pattern for SessionTracker |
-| `error.rs` review | `NOT_FOUND_SESSION`, `CONFLICT_SESSION_ACTIVE` constants exist, no `SessionError` enum | Add `SessionError` enum + `From<SessionError> for AppError` |
-| Data model `ActiveSession` schema | Fields: serverId, provider, region, createdAt, hourlyCost, sshKeyId | Add `server_ip` field (needed by SessionStatus) |
+| 1 | `ssh-key` 0.6 + `ed25519-dalek` 2.2 compile together and produce valid OpenSSH public keys | `/tmp/ssh-key-test` cargo run success |
+| 2 | `CloudProvider` trait has `create_ssh_key(api_key, public_key, label) -> String` (returns key_id) | `cloud_provider.rs` source |
+| 3 | `CloudProvider::create_server(api_key, region, ssh_key_id, cloud_init) -> ServerInfo` | `cloud_provider.rs` source |
+| 4 | `tunnel_up(server_ip, server_public_key, interface_address, dns)` generates key pair internally | `tunnel.rs` line 105 |
+| 5 | `SessionTracker::create_session(session: &ActiveSession)` writes atomic JSON | `session_tracker.rs` source |
+| 6 | `PreferencesStore::save(preferences)` writes atomic JSON | `preferences_store.rs` source |
+| 7 | `ProviderRegistry` managed as `Mutex<ProviderRegistry>` in Tauri state | `lib.rs` source |
+| 8 | All 3 providers accept `cloud_init` string in create_server (Hetzner=user_data, AWS=user_data base64, GCP=startup-script metadata) | Provider source files |
+| 9 | `ActiveSession` has optional `ssh_key_id` field for crash cleanup | `session_tracker.rs` source |
 
-### F. Unverified Assumptions
+### E. Unverified Assumptions
 
-None -- all technical assumptions verified in Session 1.
+| # | Assumption | Risk | Fallback |
+| --- | --- | --- | --- |
+| 1 | cloud-init with embedded WG server private key + client public key will configure WireGuard correctly on Ubuntu 24.04 | Low -- standard pattern used in production VPN services | Test with real Hetzner server in integration test |
 
 ## 2. Architecture
 
 ### A. Diagram
 
 ```mermaid
-classDiagram
-    class ActiveSession {
-        +String server_id
-        +Provider provider
-        +String region
-        +String server_ip
-        +String created_at
-        +f64 hourly_cost
-        +Option~String~ ssh_key_id
-    }
+sequenceDiagram
+    participant SL as ServerLifecycle
+    participant KA as KeychainAdapter
+    participant PR as ProviderRegistry
+    participant ST as SessionTracker
+    participant PS as PreferencesStore
+    participant VM as VpnManager
 
-    class SessionStatus {
-        +Provider provider
-        +String region
-        +String server_ip
-        +u64 elapsed_seconds
-        +f64 hourly_cost
-        +f64 accumulated_cost
-    }
+    SL->>ST: read_session() -- verify no active session
+    SL->>KA: retrieve_credential(provider)
 
-    class SessionError {
-        Read(String)
-        Write(String)
-        Parse(String)
-    }
+    rect rgb(230, 245, 255)
+        note over SL,PR: SSH + Server Provisioning
+        SL->>SL: Generate SSH key pair (Ed25519)
+        SL->>PR: create_ssh_key(public_key)
+        SL->>SL: Generate WG server + client key pairs
+        SL->>SL: Build cloud-init script
+        SL->>PR: create_server(region, ssh_key_id, cloud_init)
+        SL->>PR: delete_ssh_key(ssh_key_id)
+        SL->>SL: Zero SSH keys
+    end
 
-    class SessionTracker {
-        -PathBuf data_dir
-        +new(PathBuf) SessionTracker
-        +file_path() PathBuf
-        +create_session(ActiveSession) Result
-        +read_session() Result~Option~ActiveSession~~
-        +delete_session() Result
-        +get_status() Result~Option~SessionStatus~~
-    }
+    rect rgb(230, 255, 230)
+        note over SL,VM: WireGuard Tunnel
+        SL->>VM: tunnel_up(client_key_pair, server_ip, server_public_key, address, dns)
+    end
 
-    SessionTracker --> ActiveSession : manages
-    SessionTracker --> SessionStatus : computes
-    SessionTracker --> SessionError : returns
+    SL->>ST: create_session(server_info, hourly_cost)
+    SL->>PS: save(updated_preferences)
 ```
 
 ### B. Decisions
 
-| Decision | Alternatives Considered | Rationale |
+| Decision | Choice | Rationale |
 | --- | --- | --- |
-| Follow PreferencesStore pattern | Custom file manager, SQLite | Explicit over Implicit (§3.B #1) -- reuse proven codebase pattern |
-| Add `chrono` crate | `std::time::SystemTime` + manual formatting | ISO 8601 parsing/formatting without chrono is error-prone and verbose |
-| `server_ip` in ActiveSession | Compute from provider API on read | Fail Fast (§3.B #5) -- store at creation time, avoid API call on status read |
-| `SessionError` with 3 variants (Read/Write/Parse) | Reuse PreferencesError, single generic error | Single Responsibility (§3.B #3) -- separate error domain per module |
-| `get_status()` returns `Option<SessionStatus>` | Separate `has_session()` + `get_status()` | Composition (§3.B #4) -- one call covers both check and retrieval |
+| SSH key crates | `ed25519-dalek` 2.2 + `ssh-key` 0.6 | Project stack specifies these; verified compatible |
+| WG key pair ownership | Server Lifecycle generates both client + server pairs | cloud-init needs client public key; tunnel needs server public key |
+| tunnel_up refactor | Accept `&WireGuardKeyPair` parameter | Key pair must exist before provisioning for cloud-init injection |
+| Auto-cleanup pattern | Cleanup struct tracks created resources, runs compensating actions on failure | Fail Fast principle -- partial state is worse than no state |
+| cloud-init builder | Dedicated `cloud_init.rs` module, provider-agnostic | Single script template works for all 3 providers (Single Responsibility) |
+| Module structure | Directory module: `mod.rs`, `connect.rs`, `ssh_keys.rs`, `cloud_init.rs` | Boundary-based decomposition per concern |
 
 ### C. Boundaries
 
 | File | Responsibility |
 | --- | --- |
-| `session_tracker.rs` | ActiveSession struct, SessionStatus struct, SessionError enum, SessionTracker impl with all 4 methods, unit tests |
-| `error.rs` | `From<SessionError> for AppError` conversion |
-| `Cargo.toml` | `chrono` dependency |
+| `server_lifecycle/mod.rs` | ServerLifecycle struct, LifecycleError enum, re-exports |
+| `server_lifecycle/connect.rs` | 11-step connect orchestration + ConnectCleanup |
+| `server_lifecycle/ssh_keys.rs` | Ed25519 key pair generation, OpenSSH public key format |
+| `server_lifecycle/cloud_init.rs` | WireGuard cloud-init script template builder |
+| `vpn_manager/tunnel.rs` | Refactored tunnel_up accepting pre-generated key pair |
+| `ipc/server.rs` | IPC connect command wired to ServerLifecycle |
 
 ## 3. Steps
 
-### Step 1: Add chrono dependency
+### Step 1: Add SSH Key Dependencies
 
-- [x] **Status**: completed
+- [x] **Status**: completed at 2026-03-05T13:00:00+07:00
 - **Scope**: `src-tauri/Cargo.toml`
 - **Dependencies**: none
-- **Description**: Add `chrono` crate with `serde` feature for ISO 8601 datetime handling.
+- **Description**: Add `ed25519-dalek` 2.2 (with `rand_core` feature) and `ssh-key` 0.6 (with `ed25519`, `rand_core` features) to Cargo.toml. Run `cargo check` to verify compilation.
 - **Acceptance Criteria**:
-  - `chrono = { version = "0.4", features = ["serde"] }` added to `[dependencies]`
+  - `ed25519-dalek` and `ssh-key` added to `[dependencies]`
+  - `cargo check` passes with no errors
+
+### Step 2: Convert server_lifecycle to Directory Module
+
+- [x] **Status**: completed at 2026-03-05T13:00:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle.rs` → `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/error.rs`, `src-tauri/src/lib.rs`
+- **Dependencies**: none
+- **Description**: Move `server_lifecycle.rs` to `server_lifecycle/mod.rs`. Add `LifecycleError` enum with variants for each failure mode. Add `From<LifecycleError> for AppError` conversion in `error.rs`. Define `ServerLifecycle` struct holding `SessionTracker` and `PreferencesStore`. Re-export public types.
+- **Acceptance Criteria**:
+  - `server_lifecycle/mod.rs` exists with `ServerLifecycle` struct and `LifecycleError` enum
+  - `From<LifecycleError> for AppError` implemented in `error.rs`
+  - `lib.rs` compiles with the module path unchanged
   - `cargo check` passes
 
-### Step 2: Implement SessionTracker module
+### Step 3: SSH Key Generation Module
 
-- [x] **Status**: completed
-- **Scope**: `src-tauri/src/session_tracker.rs`
-- **Dependencies**: Step 1
-- **Description**: Implement the full SessionTracker module following PreferencesStore patterns. Includes:
-  - `ActiveSession` struct (serde, camelCase JSON)
-  - `SessionStatus` struct (serde, camelCase JSON)
-  - `SessionError` enum with Display impl
-  - `SessionTracker` struct with `new(PathBuf)`, `file_path()`, `create_session()`, `read_session()`, `delete_session()`, `get_status()`
-  - Atomic writes (write tmp + rename)
-  - `get_status()` live-calculates `elapsed_seconds` and `accumulated_cost` from `created_at`
-  - Unit tests: create/read/delete round-trip, missing file returns None, atomic write no tmp leftover, get_status live calculation, delete nonexistent file is Ok
+- [x] **Status**: completed at 2026-03-05T13:10:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/ssh_keys.rs`
+- **Dependencies**: Step 1, Step 2
+- **Description**: Implement `SshKeyPair` struct with Ed25519 key generation using `ed25519-dalek`. Provide `public_key_openssh()` method returning OpenSSH format string via `ssh-key` crate. Implement `Zeroize` for secure memory cleanup. Add unit tests.
 - **Acceptance Criteria**:
-  - `create_session(session)` writes `active-session.json` atomically
-  - `read_session()` returns `Ok(Some(session))` when file exists, `Ok(None)` when missing
-  - `delete_session()` removes file, returns `Ok(())` even if file missing
-  - `get_status()` returns `Ok(Some(SessionStatus))` with live-calculated elapsed/cost, `Ok(None)` when no session
-  - All fields use `#[serde(rename_all = "camelCase")]`
-  - File path is `{data_dir}/active-session.json`
-  - Temp file path is `{data_dir}/.active-session.tmp.json`
-  - Unit tests pass via `cargo test`
+  - `SshKeyPair::generate()` produces valid Ed25519 key pair
+  - `public_key_openssh()` returns string starting with `ssh-ed25519 AAAA...`
+  - `Zeroize` implementation zeroes private key bytes on drop
+  - Unit tests: generate, format, zeroize
 
-### Step 3: Add SessionError to AppError conversion
+### Step 4: Cloud-Init Script Builder
 
-- [x] **Status**: completed
-- **Scope**: `src-tauri/src/error.rs`
+- [x] **Status**: completed at 2026-03-05T13:10:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/cloud_init.rs`
 - **Dependencies**: Step 2
-- **Description**: Add `use crate::session_tracker::SessionError` import and `From<SessionError> for AppError` impl. Map all variants to `INTERNAL_UNEXPECTED` error code (same pattern as PreferencesError).
+- **Description**: Build a provider-agnostic cloud-init bash script that installs WireGuard, configures server interface with injected private key, adds client as peer with injected public key, enables IP forwarding, configures firewall (UFW: allow UDP 51820, deny all else), and starts WireGuard. Parameters: server WG private key, client WG public key, server tunnel address (10.0.0.1/24), client tunnel address (10.0.0.2/32).
 - **Acceptance Criteria**:
-  - `From<SessionError> for AppError` implemented
-  - All 3 SessionError variants map to appropriate error codes
-  - `cargo check` passes with no new errors
+  - `build_cloud_init(server_private_key, client_public_key)` returns a valid bash script string
+  - Script installs `wireguard` package
+  - Script creates `/etc/wireguard/wg0.conf` with correct [Interface] and [Peer] sections
+  - Script enables IP forwarding (`sysctl net.ipv4.ip_forward=1`)
+  - Script configures firewall (UFW: allow 51820/udp, deny all incoming)
+  - Script starts WireGuard service (`systemctl enable --now wg-quick@wg0`)
+  - Unit test: verify script contains all required sections
 
-### Step 4: Verify build and tests
+### Step 5: Refactor tunnel_up to Accept Pre-Generated Key Pair
 
-- [x] **Status**: completed
-- **Scope**: project-wide verification
-- **Dependencies**: Step 1, Step 2, Step 3
-- **Description**: Run `cargo check` and `cargo test` to verify everything compiles and all tests pass.
+- [x] **Status**: completed at 2026-03-05T13:00:00+07:00
+- **Scope**: `src-tauri/src/vpn_manager/tunnel.rs`
+- **Dependencies**: none
+- **Description**: Change `tunnel_up` signature to accept `key_pair: &WireGuardKeyPair` as the first parameter instead of generating internally. Remove the internal `WireGuardKeyPair::generate()` call. Update all existing tests that reference `tunnel_up`.
 - **Acceptance Criteria**:
-  - `cargo check` passes (0 errors)
-  - `cargo test` passes (all session_tracker tests green)
-  - No regressions in existing tests
+  - `tunnel_up(key_pair, server_ip, server_public_key, interface_address, dns)` signature
+  - No internal key generation in tunnel_up
+  - All existing tests in `tunnel.rs` updated and pass
+  - `cargo check` passes
+
+### Step 6: Connect Flow Orchestration
+
+- [x] **Status**: completed at 2026-03-05T13:18:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/connect.rs`, `src-tauri/src/server_lifecycle/mod.rs`
+- **Dependencies**: Step 3, Step 4, Step 5
+- **Description**: Implement the full 11-step connect flow as `ServerLifecycle::connect()` async method. Steps: (1) verify no active session, (2) retrieve API key from Keychain, (3) generate SSH key pair, (4) register SSH key with provider, (5) generate WG server + client key pairs, (6) build cloud-init, (7) create server, (8) delete SSH key from provider, (9) zero SSH keys, (10) tunnel_up with client key pair, (11) create session + update preferences. Implement `ConnectCleanup` struct that tracks created resources (ssh_key_id, server_id) and runs compensating actions on any failure. All WG and SSH keys zeroed on cleanup.
+- **Acceptance Criteria**:
+  - `ServerLifecycle::connect(provider, region, registry, api_key)` returns `SessionStatus`
+  - Auto-cleanup: if server created but tunnel fails, server is destroyed and SSH key deleted
+  - Auto-cleanup: if SSH key registered but server fails, SSH key deleted
+  - All key material zeroed on success and failure paths
+  - Session file created with server_id, provider, region, server_ip, hourly_cost
+  - Preferences updated with last_provider and last_region
+  - Unit test: verify cleanup is called on simulated failure (mock provider)
+
+### Step 7: Wire IPC Connect Command
+
+- [x] **Status**: completed at 2026-03-05T13:22:00+07:00
+- **Scope**: `src-tauri/src/ipc/server.rs`, `src-tauri/src/lib.rs`
+- **Dependencies**: Step 6
+- **Description**: Replace the stub `connect` IPC command with real implementation. Access `ProviderRegistry` and `ServerLifecycle` from Tauri state. Add `ServerLifecycle` to Tauri managed state in `lib.rs`. Validate inputs (provider registered, no active session). Delegate to `ServerLifecycle::connect()`. Return `SessionStatus` on success.
+- **Acceptance Criteria**:
+  - `connect` IPC command delegates to `ServerLifecycle::connect()`
+  - `ServerLifecycle` added to Tauri managed state in `lib.rs`
+  - Input validation: returns `CONFLICT_SESSION_ACTIVE` if session exists
+  - Input validation: returns `NOT_FOUND_PROVIDER` if provider not registered
+  - Returns `SessionStatus` JSON matching API Design §4.C
+  - `cargo check` passes with all IPC commands registered
 
 ## 4. Execution Strategy
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Single-line Cargo.toml edit, trivial |
-| 2 | scout → worker | Main implementation -- needs PreferencesStore pattern as context reference |
-| 3 | Direct | Small edit to error.rs, depends on Step 2's SessionError definition |
-| 4 | Direct | Run cargo check + cargo test commands |
+| 1 | Direct | Single dependency addition |
+| 2 | Direct | File move + struct/enum scaffolding |
+| 3 | scout → worker | New module needing ssh-key API knowledge |
+| 4 | scout → worker | New module needing cloud-init format knowledge |
+| 5 | Direct | Small refactor of existing signature |
+| 6 | scout → worker → reviewer | Core orchestration logic, complex, needs quality review |
+| 7 | scout → worker | IPC wiring, follows existing pattern in provider.rs |
 
-**Execution order**: `Step 1 → Step 2 → Step 3 → Step 4` (sequential)
+### A. Execution Order
 
-**Complexity estimates**:
+```plain
+Parallel Group A (no dependencies):
+- Step 1: Add SSH key dependencies
+- Step 2: Convert to directory module
+- Step 5: Refactor tunnel_up
 
-| Step | Tier | Estimated Tokens |
-| --- | --- | --- |
-| 1 | Trivial | < 5K |
-| 2 | Medium | 20--40K |
-| 3 | Trivial | < 5K |
-| 4 | Trivial | < 5K |
+Parallel Group B (after Group A):
+- Step 3: SSH Key Generation (needs Step 1 + 2)
+- Step 4: Cloud-Init Builder (needs Step 2)
 
-**Risk flags**: None -- all patterns verified, no external API calls, no uncertain dependencies.
+Sequential (after Group B):
+- Step 6: Connect Flow (needs Step 3 + 4 + 5)
+- Step 7: Wire IPC (needs Step 6)
+```
+
+### B. Risk Flags
+
+- **Step 5**: Existing tunnel_up integration test (`tunnel_up_down_cycle`) is `#[ignore]` so no CI risk, but the signature change affects the test code
+- **Step 6**: Auto-cleanup logic is complex -- ConnectCleanup must handle partial state correctly. Mock-based unit test validates the pattern but real integration test (with Hetzner) is the true verification
 
 ---
