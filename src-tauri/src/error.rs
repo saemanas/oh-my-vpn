@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::keychain_adapter::KeychainError;
 use crate::preferences_store::PreferencesError;
+use crate::session_tracker::SessionError;
 
 // ── AppError ────────────────────────────────────────────────────────────────
 
@@ -162,6 +163,15 @@ impl From<PreferencesError> for AppError {
     fn from(error: PreferencesError) -> Self {
         let message = error.to_string();
         AppError::new("INTERNAL_UNEXPECTED", message, None)
+    }
+}
+
+// ── From<SessionError> for AppError ─────────────────────────────────────────
+
+impl From<SessionError> for AppError {
+    fn from(error: SessionError) -> Self {
+        let message = error.to_string();
+        AppError::new(codes::INTERNAL_UNEXPECTED, message, None)
     }
 }
 
