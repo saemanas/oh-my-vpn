@@ -1,59 +1,54 @@
 ---
-task: "Popover Shell + Stack Navigation"
+task: "M5.2: Disconnected View"
 milestone: "M5"
-module: "M5.1"
-created_at: "2026-03-05T14:26:00+07:00"
-status: "completed"
-branch: "feat/popover-shell-stack-navigation"
+module: "M5.2"
+created_at: "2026-03-05T17:11:45+07:00"
+status: "pending"
+branch: "feat/menu-bar-disconnected-view"
 ---
 
-# PLAN.md -- M5.1: Popover Shell + Stack Navigation
-
-> **Status**: Completed at 2026-03-05T14:53:00+07:00
-> **Branch**: feat/popover-shell-stack-navigation
+# PLAN: M5.2 -- Disconnected View
 
 ## 1. Context
 
 ### A. Problem Statement
 
-M5.1 requires building the popover shell (outermost UI container) and stack navigation system that all M5 views (Disconnected, Connected, Provisioning, Error, etc.) will live inside. The frontend is currently a placeholder `App.tsx` with no components or navigation. The Rust tray handler shows the window on left-click but does not position it relative to the tray icon.
+Build the Disconnected View for the Menu Bar UI -- the primary screen users see when no VPN connection is active. It includes a provider selector (when multiple providers are registered), a region list sorted by hourly cost, and a connect button. This wires the frontend to the backend IPC commands (`list_providers`, `list_regions`, `connect`) implemented in M2.5 and M4.5.
 
 ### B. Current State
 
-- **Frontend**: `src/App.tsx` renders a centered `<h1>Oh My VPN</h1>`. `src/components/` is empty (`.gitkeep` only). `src/tokens.css` is fully integrated with design tokens (colors, spacing, shadows, motion, reduced motion, dark mode).
-- **Backend tray**: `src-tauri/src/lib.rs` has a `TrayIconBuilder` with left-click handler that calls `show()` + `set_focus()` on the main window. No positioning logic. Right-click shows a context menu with "Quit".
-- **Tauri window config**: `tauri.conf.json` defines `main` window as 320x480, `visible: false`, `skipTaskbar: true`, `resizable: false`, `decorations: false`.
-- **Dependencies**: React 19.2.4, TypeScript 5.8.3, Vite 7, `@tauri-apps/api` v2.
+- **M5.1 complete**: `PopoverShell`, `StackNavigator`, `NavigationProvider`, `BackButton` exist in `src/`
+- **Backend IPC ready**: `list_providers`, `list_regions`, `connect` commands implemented in `src-tauri/src/ipc/provider.rs` and `server.rs`
+- **Placeholder view**: `src/views/PlaceholderView.tsx` (HomeView) is the current initial view -- needs replacement
+- **Liquid Glass CSS**: 4-layer sandwich pattern in `src/styles/liquid-glass.css` with `.glass-btn` shape
+- **Design tokens**: `src/tokens.css` with all semantic colors, spacing, typography, and motion tokens
 
 ### C. Constraints
 
-- No external routing or animation library -- use React Context + CSS transitions only.
-- Must follow Liquid Glass design system (tokens.css values).
-- Reduced motion: all animations → `fadeIn 200ms linear` when `prefers-reduced-motion: reduce`.
-- 320px fixed width popover, content-driven height.
+- `get_preferences` IPC is a NOT_IMPLEMENTED stub (M6.2 scope) -- last-used region pre-selection must gracefully degrade
+- M5.4 (Provisioning Stepper) not yet built -- connect button triggers IPC but navigation target is placeholder
+- Popover width fixed at 320px (PopoverShell constraint)
+- Must support dark/light mode via `prefers-color-scheme`
+- Must support `prefers-reduced-motion`
 
-### D. Input Sources
+### D. Verified Facts
 
-- Milestone document: `docs/milestone/2026-03-04-1726-milestone.md` -- M5.1 definition
-- UX Design: `docs/ux-design/2026-03-03-1619-ux-design.md` -- §4 (core flow user journey)
-- UI Design: `docs/ui-design/2026-03-04-0123-ui-design.md` -- §3 (layout system), §4.G (popover navigation)
+| # | Fact | Evidence |
+| --- | --- | --- |
+| 1 | Tauri IPC invoke: `invoke<T>(cmd, args?)` from `@tauri-apps/api/core` | `node_modules/@tauri-apps/api/core.d.ts` |
+| 2 | `RegionInfo`, `ProviderInfo`, `ServerInfo` serialize as **camelCase** JSON (`rename_all = "camelCase"` added) | `src-tauri/src/types.rs` -- serde rename attribute added during scanning |
+| 3 | `SessionStatus` serializes as **camelCase** JSON (`#[serde(rename_all = "camelCase")]`) | `src-tauri/src/session_tracker.rs` |
+| 4 | `list_regions` returns regions already sorted by `hourly_cost` ascending | `src-tauri/src/ipc/provider.rs` line ~160 |
+| 5 | `list_providers` returns empty array when no providers registered (triggers onboarding) | `src-tauri/src/ipc/provider.rs` |
+| 6 | Navigation API: `push(id, title, component)` and `pop()` from `useNavigation()` hook | `src/navigation/stack-context.tsx` |
 
-### E. Verified Facts
+### E. Unverified Assumptions
 
-| # | What was tested | Result | Decision |
+| # | Assumption | Risk | Fallback |
 | --- | --- | --- | --- |
-| 1 | Tauri v2 `TrayIconEvent::Click` struct fields | Contains `rect: Rect` with tray icon position + size | Use `rect` to calculate window position under tray icon |
-| 2 | `WebviewWindow::set_position()` availability | Exists, accepts `Position` type | Use for positioning window on each tray click |
-| 3 | React 19.2.4 installed | Confirmed via `bun pm ls` | Modern hooks (useContext, useCallback, useRef) available |
-| 4 | `tokens.css` motion tokens | `--duration-slow: 650ms`, `--easing-spring`, `--easing-smooth` defined, reduced motion media query sets spring → ease, durations capped at 200ms | CSS transitions use token variables directly |
-| 5 | `src/components/` state | Empty (`.gitkeep` only) | No existing patterns to conflict with |
-| 6 | `tauri.conf.json` window config | 320x480, no decorations, hidden by default | Matches popover spec (320px fixed width) |
+| 1 | Flag emoji rendering works in Tauri webview (WebKit) from country code extraction | Low -- WebKit supports regional indicator symbols | Show country code text instead of emoji |
 
-### F. Unverified Assumptions
-
-| # | Assumption | Why not verified | Risk | Fallback |
-| --- | --- | --- | --- | --- |
-| 1 | CSS `translateX()` + spring easing renders smoothly in Tauri WebView | Requires runtime visual test | Low -- WebKit-based, CSS transitions well-supported | Use `opacity` fade fallback |
+---
 
 ## 2. Architecture
 
@@ -61,131 +56,161 @@ M5.1 requires building the popover shell (outermost UI container) and stack navi
 
 ```mermaid
 flowchart TD
-    subgraph rust["Rust (src-tauri/src/lib.rs)"]
-        TRAY[TrayIconEvent::Click]
-        POS[Calculate position from rect]
-        WIN[set_position + show/toggle]
-        BLUR[on_window_event blur → hide]
-        TRAY --> POS --> WIN
-        WIN -.->|focus lost| BLUR
+    subgraph App["App.tsx"]
+        NP[NavigationProvider]
+        PS[PopoverShell]
+        SN[StackNavigator]
     end
 
-    subgraph frontend["Frontend (src/)"]
-        subgraph nav["navigation/"]
-            CTX[stack-context.tsx<br/>NavigationContext + Provider]
-            NAV[StackNavigator.tsx<br/>Transition container]
-            CSS_NAV[StackNavigator.css<br/>Push/pop transitions]
-            BACK[BackButton.tsx]
-        end
-        subgraph shell["components/"]
-            SHELL[PopoverShell.tsx<br/>Outer container]
-            CSS_SHELL[PopoverShell.css]
-        end
-        subgraph views["views/"]
-            PH[PlaceholderView.tsx<br/>Demo views for testing]
-        end
-        APP[App.tsx<br/>Provider + Shell + Navigator]
-        CSS_APP[App.css]
+    subgraph DisconnectedView["DisconnectedView.tsx"]
+        DV[DisconnectedView]
+        DV -->|"list_providers()"| IPC1[IPC]
+        DV -->|"list_regions(provider)"| IPC2[IPC]
+        DV -->|"connect(provider, region)"| IPC3[IPC]
     end
 
-    WIN --> APP
-    APP --> CTX
-    CTX --> NAV
-    NAV --> SHELL
-    SHELL --> PH
-    NAV --> CSS_NAV
-    BACK --> CTX
+    subgraph Components["components/"]
+        PSel[ProviderSelector]
+        RL[RegionList]
+        RR[RegionRow]
+        GB[GlassButton]
+    end
+
+    subgraph Types["types/"]
+        IT[ipc.ts]
+    end
+
+    NP --> PS --> SN --> DV
+    DV --> PSel
+    DV --> RL
+    RL --> RR
+    DV --> GB
+    DV --> IT
+    PSel --> IT
+    RL --> IT
+    GB --> IT
 ```
 
 ### B. Decisions
 
-| Decision | Alternative considered | Rationale |
-| --- | --- | --- |
-| Custom stack nav (Context + CSS) | react-router, framer-motion | Composition over inheritance (Principle 4) -- zero dependencies, popover does not need a router |
-| CSS transitions (`translateX`) | JS-based animation | Explicit over implicit (Principle 1) -- reuses tokens.css easing/duration values directly |
-| Rust-side window positioning | Frontend JS positioning | Fail fast (Principle 5) -- window position is OS-level, Rust controls it directly via Tauri API |
-| Plain `.css` files | styled-components, Tailwind | Consistency with existing `tokens.css` pattern, no additional dependencies |
+1. **View vs Component separation** -- `DisconnectedView` in `src/views/` (matches existing PlaceholderView pattern), reusable components in `src/components/`. Principle: Single Responsibility.
+2. **GlassButton extraction** -- Extract Liquid Glass button markup into a reusable component with variant support (success/error/neutral/warning/info). Principle: Composition over Inheritance. Reused by M5.3, M5.5.
+3. **TypeScript IPC types** -- Mirror backend Rust types in `src/types/ipc.ts` with camelCase JSON field names (all structs now use `rename_all = "camelCase"`). Principle: Explicit over Implicit.
+4. **Graceful degradation for preferences** -- Call `get_preferences` wrapped in try/catch. On failure (NOT_IMPLEMENTED), skip last-used region pre-selection. When M6.2 implements it, feature activates automatically. Principle: Reversibility.
+5. **Connect navigation placeholder** -- Connect button invokes `connect` IPC. On success, push a temporary "Connecting..." view. M5.4 (Provisioning Stepper) will replace it. Principle: Reversibility.
 
-### C. Boundaries
+### C. Component Structure
 
-| Module | Responsibility |
-| --- | --- |
-| `lib.rs` (Rust) | Tray click → position window under tray icon, toggle show/hide, blur → hide |
-| `navigation/` | Stack state management (push/pop), transition rendering, back button |
-| `components/` | PopoverShell layout (padding, max-height, overflow, entry animation) |
-| `views/` | Placeholder views for navigation testing (replaced by M5.2+ views later) |
-| `App.tsx` | Composition root: NavigationProvider → PopoverShell → StackNavigator |
+```plain
+src/
+├── types/
+│   └── ipc.ts                    # IPC type definitions
+├── components/
+│   ├── GlassButton.tsx           # Reusable Liquid Glass button (variants)
+│   ├── ProviderSelector.tsx      # Provider dropdown (>1 provider)
+│   ├── RegionList.tsx            # Scrollable region list + RegionRow
+│   └── PopoverShell.tsx          # (existing)
+├── views/
+│   ├── DisconnectedView.tsx      # Container: state, IPC, composition
+│   └── PlaceholderView.tsx       # (existing -- HomeView replaced)
+└── App.tsx                       # Wire DisconnectedView as initial view
+```
 
-### D. Transition Spec
+### D. Data Flow
 
-| Transition | CSS property | Duration + Easing |
-| --- | --- | --- |
-| Stack push (incoming) | `translateX(100%)` → `translateX(0)` | `var(--duration-slow) var(--easing-spring)` |
-| Stack push (outgoing) | `translateX(0)` → `translateX(-30%)` | `var(--duration-slow) var(--easing-spring)` |
-| Stack pop (incoming) | `translateX(-30%)` → `translateX(0)` | `var(--duration-slow) var(--easing-spring)` |
-| Stack pop (outgoing) | `translateX(0)` → `translateX(100%)` | `var(--duration-slow) var(--easing-spring)` |
-| Popover entry | `opacity 0 + translateY(-8px)` → `opacity 1 + translateY(0)` | `var(--duration-normal) var(--easing-smooth)` |
-| Reduced motion | All above → `opacity` only | `200ms linear` |
+1. **Mount**: `DisconnectedView` calls `list_providers()` → if 1 provider, auto-select; if >1, show `ProviderSelector`
+2. **Provider selected**: calls `list_regions(provider)` → populates `RegionList` (shows skeleton during load)
+3. **Region selected**: stores in local state; last-used region pre-selected if preferences available
+4. **Connect clicked**: calls `connect(provider, region)` → shows loading state on button → on success, pushes placeholder connected view
+
+### E. Key Specs from UI Design
+
+- **Region row**: flag emoji + region name + instance type (caption, secondary) + hourly cost (SF Mono, right-aligned)
+- **Region list**: scrollable, skeleton rows (3 shimmer rows) during loading
+- **Connect button**: success variant (`--color-success-tint`), Liquid Glass 4-layer
+- **Provider selector**: visible only when multiple providers registered
+- **GlassButton states**: default, hover (scale 1.02), active (scale 0.97), disabled (opacity 0.4), loading (spinner + warning tint)
+- **Focus indicator**: `box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4)` on `:focus-visible`
+
+---
 
 ## 3. Steps
 
-### Step 1: Tray Popover Positioning (Rust)
+### Step 1: IPC Types + GlassButton
 
-- [x] **Status**: completed at 2026-03-05T14:38:00+07:00
-- **Scope**: `src-tauri/src/lib.rs`
+- [ ] **Status**: pending
+- **Scope**: `src/types/ipc.ts`, `src/components/GlassButton.tsx`, `src/components/GlassButton.css`
 - **Dependencies**: none
-- **Description**: Modify the tray icon left-click handler to calculate window position from `TrayIconEvent::Click { rect, .. }` and position the window centered horizontally under the tray icon. Add toggle behavior (click again to hide). Add `on_window_event` handler to hide window on focus loss (blur/focus-changed).
+- **Description**: Create TypeScript type definitions mirroring backend Rust types (Provider, ProviderInfo, RegionInfo, SessionStatus, etc.) with exact JSON field names. Create a reusable GlassButton component with Liquid Glass 4-layer sandwich, variant support (success/error/neutral/warning/info), states (default/hover/active/disabled/loading), and focus-visible indicator.
 - **Acceptance Criteria**:
-  - Left-click positions window centered under tray icon (`x = rect.x + rect.width/2 - window_width/2`, `y = rect.y + rect.height`)
-  - Repeated left-click toggles window visibility (show/hide)
-  - Window hides when it loses focus (click outside)
-  - Window config remains: 320px width, no decorations, skip taskbar
+  - `src/types/ipc.ts` exports: `Provider`, `ProviderStatus`, `ProviderInfo`, `RegionInfo`, `SessionStatus`, `OrphanedServer`, `OrphanAction`
+  - Field names match actual JSON serialization (camelCase for all: RegionInfo, ProviderInfo, SessionStatus, OrphanedServer)
+  - `GlassButton` renders Liquid Glass 4-layer structure with configurable `variant`, `disabled`, `loading`, `onClick`, `children` props
+  - Button hover scales 1.02 with padding expand, active scales 0.97
+  - Loading state shows spinner with warning tint
+  - Disabled state shows opacity 0.4
+  - `:focus-visible` shows glow ring (`0 0 0 3px rgba(59, 130, 246, 0.4)`)
+  - Dark mode support via existing CSS token variables
+  - Reduced motion: transitions become 200ms linear
 
-### Step 2: Stack Navigation System (Frontend)
+### Step 2: ProviderSelector + RegionList
 
-- [x] **Status**: completed at 2026-03-05T14:46:00+07:00
-- **Scope**: `src/navigation/stack-context.tsx`, `src/navigation/StackNavigator.tsx`, `src/navigation/StackNavigator.css`, `src/navigation/BackButton.tsx`
-- **Dependencies**: none
-- **Description**: Implement the stack navigation system. `NavigationContext` provides `push(id, title, component)`, `pop()`, `canGoBack`, `currentView`. `StackNavigator` renders the stack with CSS `translateX` transitions for push/pop. `BackButton` renders a back chevron that calls `pop()`. All transitions use design tokens. Reduced motion support via CSS media query already in tokens.css.
+- [ ] **Status**: pending
+- **Scope**: `src/components/ProviderSelector.tsx`, `src/components/ProviderSelector.css`, `src/components/RegionList.tsx`, `src/components/RegionList.css`
+- **Dependencies**: Step 1
+- **Description**: Create ProviderSelector (renders only when >1 provider, shows provider name + account label, triggers onSelect callback) and RegionList (scrollable list of RegionRow items with flag emoji, region name, hourly cost right-aligned in SF Mono; skeleton loading state with 3 shimmer rows; selected state for last-used region; triggers onSelect callback).
 - **Acceptance Criteria**:
-  - `push(id, title, component)` adds to stack, triggers slide-in from right (650ms spring)
-  - `pop()` removes from stack, triggers slide-out to right (650ms spring)
-  - `canGoBack` returns `true` when stack depth > 1
-  - Only the top-of-stack view is interactive (previous views are inert)
-  - Reduced motion: transitions become `fadeIn 200ms`
-  - No external animation library used
+  - `ProviderSelector` props: `providers: ProviderInfo[]`, `selectedProvider: Provider`, `onSelect: (provider: Provider) => void`
+  - `ProviderSelector` renders nothing when `providers.length <= 1`
+  - Each provider option shows provider name (capitalized) and account label
+  - `RegionList` props: `regions: RegionInfo[]`, `selectedRegion: string | null`, `onSelect: (region: string) => void`, `isLoading: boolean`
+  - When `isLoading`, shows 3 skeleton rows with CSS shimmer animation
+  - Each region row: flag emoji (derived from displayName country code) + region display name + instance type (caption size, secondary color) + `$X.XXX/hr` in SF Mono right-aligned
+  - Selected region row has glass tint highlight
+  - Hover state on region rows with glass tint
+  - Scrollable with hidden scrollbar (matches PopoverShell pattern)
+  - Keyboard accessible: Tab navigates rows, Enter/Space selects
+  - Dark mode and reduced motion support
 
-### Step 3: PopoverShell + App Integration
+### Step 3: DisconnectedView + App Wiring
 
-- [x] **Status**: completed at 2026-03-05T14:53:00+07:00
-- **Scope**: `src/components/PopoverShell.tsx`, `src/components/PopoverShell.css`, `src/views/PlaceholderView.tsx`, `src/App.tsx`, `src/App.css`
-- **Dependencies**: Step 2
-- **Description**: Build PopoverShell (320px fixed width, 24px internal padding, 16px section gap, max-height constraint, overflow scroll). Create PlaceholderView with buttons to test push/pop navigation. Rewrite App.tsx to compose NavigationProvider + PopoverShell + StackNavigator. Add Esc key handler to hide window via `@tauri-apps/api`. Add `fadeSlideIn` popover entry animation.
+- [ ] **Status**: pending
+- **Scope**: `src/views/DisconnectedView.tsx`, `src/views/DisconnectedView.css`, `src/App.tsx` (update)
+- **Dependencies**: Step 1, Step 2
+- **Description**: Create the DisconnectedView container that manages state (providers, regions, selected provider/region, loading states, errors), calls IPC commands (`list_providers`, `list_regions`, `connect`, `get_preferences`), composes ProviderSelector + RegionList + GlassButton, and handles connect flow. Update App.tsx to use DisconnectedView as the initial view, replacing HomeView. Attempt `get_preferences` for last-used region with graceful fallback.
 - **Acceptance Criteria**:
-  - PopoverShell: 320px width, 24px padding (`--space-6`), 16px gap (`--space-4`)
-  - PopoverShell: max-height respects screen bounds, overflow-y auto
-  - PlaceholderView: "Home" view with push button, "Detail" view with content
-  - Esc key hides the window (calls `getCurrentWindow().hide()`)
-  - Popover entry: `fadeSlideIn 400ms var(--easing-smooth)` on mount
-  - Dark/Light mode works automatically via tokens.css
-  - Stack navigation push/pop visually functional with placeholder views
+  - On mount: calls `list_providers()` → auto-selects if single provider → calls `list_regions(provider)`
+  - Provider change triggers fresh `list_regions()` call with loading state
+  - Connect button (success variant) enabled only when a region is selected
+  - Connect button click: shows loading state → calls `connect(provider, region)` → on success pushes placeholder view → on error shows inline error message
+  - Attempts `get_preferences` on mount for `last_provider`/`last_region` pre-selection; catches error silently if not implemented
+  - Error state: shows error message with retry option when `list_providers` or `list_regions` fails
+  - `App.tsx` renders `DisconnectedView` as initial NavigationProvider view (replaces HomeView)
+  - PlaceholderView.tsx cleaned up (remove HomeView, keep DetailView if needed or remove entirely)
+
+---
 
 ## 4. Execution Strategy
 
-| Step | Chain | Complexity | Rationale |
-| --- | --- | --- | --- |
-| 1 | scout → worker | Simple | Single Rust file modification, needs tray API context from codebase |
-| 2 | scout → worker | Medium | 4 new files, clear spec but transition logic requires careful CSS |
-| 3 | scout → worker | Medium | 5 files (3 new + 2 modified), integrates Step 2 output |
+| Step | Chain | Rationale |
+| --- | --- | --- |
+| 1 | scout → worker | Foundation files (types + button), 2-3 files, clear spec from UI design |
+| 2 | scout → worker | Presentational components, 2-4 files, depends on Step 1 types |
+| 3 | scout → worker → reviewer | Container with IPC integration + App wiring, highest complexity, reviewer validates IPC correctness and state management |
 
-**Execution order:**
+**Execution order**: Step 1 → Step 2 → Step 3 (strictly sequential)
 
-```plain
-Step 1 → Step 2 → Step 3 (all sequential)
-```
+**Complexity estimates**:
 
-Step 1 and Step 2 have no mutual dependencies but are executed sequentially per the no-parallel rule. Step 3 depends on Step 2 (navigation system must exist before integration).
+| Step | Tier | Estimated Tokens |
+| --- | --- | --- |
+| 1 | Simple | ~15K |
+| 2 | Medium | ~25K |
+| 3 | Medium | ~30K |
 
-**Risk flags:** None -- all APIs verified, all files are new or have clear modification points.
+**Risk flags**:
+
+- Step 3: `connect` IPC success handler needs a navigation target. M5.4 (Provisioning Stepper) is not built. Plan: push a minimal placeholder "Connecting..." view. Record for M5.4 to replace.
+- Step 3: `get_preferences` returns NOT_IMPLEMENTED error. Plan: wrap in try/catch, default to no pre-selection.
 
 ---
