@@ -228,6 +228,8 @@ impl ServerLifecycle {
             created_at: Utc::now().to_rfc3339(),
             hourly_cost,
             ssh_key_id: None, // SSH key already deleted
+            server_wireguard_public_key: Some(server_wg_key_pair.public_key_base64()),
+            client_wireguard_private_key: Some(client_wg_key_pair.private_key_base64()),
         };
 
         self.session_tracker.create_session(&session)

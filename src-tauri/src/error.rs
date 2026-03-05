@@ -232,6 +232,16 @@ impl From<LifecycleError> for AppError {
                 msg,
                 None,
             ),
+            LifecycleError::OrphanDetectionFailed(msg) => AppError::new(
+                codes::INTERNAL_UNEXPECTED,
+                msg,
+                None,
+            ),
+            LifecycleError::OrphanReconnectFailed(msg) => AppError::new(
+                codes::TUNNEL_SETUP_FAILED,
+                msg,
+                None,
+            ),
         }
     }
 }
