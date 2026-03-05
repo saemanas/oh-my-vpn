@@ -163,5 +163,3 @@ These tables are the **confirmed dependency list** for the project. Follow these
 4. **Review cycle** -- re-verify latest versions and full-stack compatibility at the start of each new milestone
 
 ---
-
----
