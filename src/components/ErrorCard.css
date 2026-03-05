@@ -1,0 +1,57 @@
+/* ── ErrorCard (Liquid Glass) ──────────────────────────────────────────────── */
+
+.error-card {
+  margin-top: var(--space-2);
+}
+
+.error-card--error .liquidGlass-tint {
+  background: var(--color-error-tint);
+}
+
+.error-card--warning .liquidGlass-tint {
+  background: var(--color-warning-tint);
+}
+
+.error-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.error-card__message {
+  margin: 0;
+  font-size: var(--font-size-body-sm);
+  line-height: 1.5;
+}
+
+.error-card--error .error-card__message {
+  color: var(--color-error-text);
+}
+
+.error-card--warning .error-card__message {
+  color: var(--color-warning-text);
+}
+
+.error-card__description {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.error-card__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  .error-card--error .error-card__message {
+    color: #f87171;
+  }
+
+  .error-card--warning .error-card__message {
+    color: #fbbf24;
+  }
+}

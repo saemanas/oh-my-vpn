@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ErrorCard } from "../components/ErrorCard";
 import { GlassButton } from "../components/GlassButton";
 import { SessionCard } from "../components/SessionCard";
 import { useNavigation } from "../navigation/stack-context";
-import type { SessionStatus } from "../types/ipc";
+import type { AppError, SessionStatus } from "../types/ipc";
 import "./ConnectedView.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -34,7 +36,8 @@ export function ConnectedView({ initialSession }: ConnectedViewProps) {
 	const { pop } = useNavigation();
 	const [session, setSession] = useState<SessionStatus>(initialSession);
 	const [isDisconnecting, setIsDisconnecting] = useState(false);
-	const [disconnectError, setDisconnectError] = useState<string | null>(null);
+	const [disconnectError, setDisconnectError] = useState<AppError | null>(null);
+	const [showConfirm, setShowConfirm] = useState(false);
 	const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 	// ── Polling ────────────────────────────────────────────────────────────
@@ -66,7 +69,15 @@ export function ConnectedView({ initialSession }: ConnectedViewProps) {
 
 	// ── Disconnect ─────────────────────────────────────────────────────────
 
-	const handleDisconnect = useCallback(async () => {
+	const handleDisconnectRequest = useCallback(() => {
+		setShowConfirm(true);
+	}, []);
+
+	const handleConfirmCancel = useCallback(() => {
+		setShowConfirm(false);
+	}, []);
+
+	const handleConfirmDisconnect = useCallback(async () => {
 		setIsDisconnecting(true);
 		setDisconnectError(null);
 
@@ -79,12 +90,27 @@ export function ConnectedView({ initialSession }: ConnectedViewProps) {
 		try {
 			await invoke("disconnect");
 			pop();
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			setDisconnectError(message);
+		} catch (err: unknown) {
+			const appError = err as AppError;
+			setDisconnectError(appError);
 			setIsDisconnecting(false);
+			setShowConfirm(false);
 		}
 	}, [pop]);
+
+	const handleRetry = useCallback(() => {
+		setDisconnectError(null);
+		setShowConfirm(true);
+	}, []);
+
+	// ── Derived state ──────────────────────────────────────────────────────
+
+	const isDestructionFailure =
+		disconnectError?.code === "PROVIDER_DESTRUCTION_FAILED";
+	const consoleUrl =
+		isDestructionFailure && disconnectError?.details
+			? String((disconnectError.details as { consoleUrl?: string }).consoleUrl ?? "")
+			: "";
 
 	// ── Render ─────────────────────────────────────────────────────────────
 
@@ -100,20 +126,55 @@ export function ConnectedView({ initialSession }: ConnectedViewProps) {
 			<SessionCard session={session} />
 
 			{/* Disconnect error */}
-			{disconnectError && (
-				<p className="connected-view__error" role="alert">
-					{disconnectError}
-				</p>
+			{disconnectError && !isDestructionFailure && (
+				<ErrorCard message={disconnectError.message}>
+					<GlassButton variant="neutral" onClick={handleRetry}>
+						Retry
+					</GlassButton>
+				</ErrorCard>
+			)}
+
+			{/* Persistent destruction failure -- manual cleanup needed */}
+			{disconnectError && isDestructionFailure && (
+				<ErrorCard
+					message={disconnectError.message}
+					description="Delete the server manually from your provider console."
+					variant="warning"
+				>
+					{consoleUrl && (
+						<GlassButton
+							variant="warning"
+							onClick={() =>
+								window.open(consoleUrl, "_blank", "noopener")
+							}
+						>
+							Open Console
+						</GlassButton>
+					)}
+				</ErrorCard>
 			)}
 
 			{/* Disconnect button */}
-			<GlassButton
-				variant="error"
-				onClick={() => void handleDisconnect()}
-				loading={isDisconnecting}
-			>
-				Disconnect
-			</GlassButton>
+			{!disconnectError && (
+				<GlassButton
+					variant="error"
+					onClick={handleDisconnectRequest}
+				>
+					Disconnect
+				</GlassButton>
+			)}
+
+			{/* Confirm dialog */}
+			<ConfirmDialog
+				open={showConfirm}
+				title="Disconnect"
+				message="Server will be destroyed. Continue?"
+				confirmLabel="Destroy"
+				confirmVariant="error"
+				confirmLoading={isDisconnecting}
+				onConfirm={() => void handleConfirmDisconnect()}
+				onCancel={handleConfirmCancel}
+			/>
 		</div>
 	);
 }

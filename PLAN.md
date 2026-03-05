@@ -1,223 +1,179 @@
 ---
-task: "Provisioning Stepper"
+task: "Destruction Confirm Dialog + Error Display"
 milestone: "M5"
-module: "M5.4"
-created_at: "2026-03-05T19:16:00+07:00"
-status: "completed"
-branch: "feat/provisioning-stepper"
+module: "M5.5"
+created_at: "2026-03-05T19:43:00+07:00"
+status: "pending"
+branch: "feat/confirm-dialog-error-display"
 ---
 
-> **Status**: Completed at 2026-03-05T19:39:00+07:00
-> **Branch**: feat/provisioning-stepper
+> **Status**: Completed at 2026-03-05T19:55:00+07:00
+> **Branch**: feat/confirm-dialog-error-display
 
-# Provisioning Stepper (M5.4)
+# PLAN -- M5.5: Destruction Confirm Dialog + Error Display
 
 ## 1. Context
 
 ### A. Problem Statement
 
-The connect flow currently has a placeholder `ConnectingView` that shows "Connecting..." with no progress feedback. The UI spec requires a 3-step vertical stepper (Creating server → Installing WireGuard → Connecting tunnel) with 4 states per step (done/active/waiting/failed), plus an error glass card with retry on failure.
-
-The backend `connect` IPC is a single async call that returns `SessionStatus` on success or `AppError` on failure -- no mid-flow progress events exist. Real-time stepper updates require backend event emission.
+ConnectedView's disconnect button currently invokes `disconnect` IPC directly without confirmation. The UI design (§4.F) and cross-cutting concepts (§8.A) require an explicit confirmation dialog before the destructive disconnect-and-destroy flow. Additionally, disconnect errors are displayed as a plain `<p>` tag -- they should use the same Liquid Glass error card pattern already established in ProvisioningView.
 
 ### B. Current State
 
-- `DisconnectedView.tsx` -- calls `invoke("connect")`, pushes placeholder `ConnectingView` **after** success (wrong order for stepper)
-- `connect.rs` -- 11-step connect flow, no `emit` calls, no `AppHandle` parameter
-- `server.rs` (IPC) -- `connect` command does not pass `AppHandle` to lifecycle
-- `ipc.ts` -- no `ConnectProgress` type
-- Existing patterns: Liquid Glass 4-layer sandwich, `GlassButton` component, `useNavigation` (push/pop), CSS variables from `tokens.css`
+- **ConnectedView**: disconnect button → `invoke("disconnect")` → pop on success. Errors shown via `<p className="connected-view__error">`.
+- **ProvisioningView**: has an inline error card (Liquid Glass 4-layer sandwich, Cancel/Retry) but it is hardcoded inside the component -- not reusable.
+- **GlassButton**: fully implemented with all variants (`success|error|neutral|warning|info`), loading, disabled, focus ring.
+- **Design tokens**: `--z-overlay: 300`, `--z-modal: 400`, `--blur-overlay: 8px`, `--color-error-tint`, `--color-separator` all exist.
+- **App.tsx Esc handler**: global `Esc` key hides the popover window. ConfirmDialog must stop propagation when open so Esc closes the dialog first, not the popover.
 
 ### C. Constraints
 
-- Tauri 2 event API: `app.emit("event-name", payload)` on backend, `listen("event-name")` on frontend
-- `AppHandle` available in IPC commands via `tauri::AppHandle` parameter
-- Stepper must work with Liquid Glass design system and dark/light mode
-- Reduced motion: animations → fadeIn 200ms
+- Popover is 320px fixed width -- dialog is absolute-positioned inside, not a Portal.
+- ConfirmDialog must be reusable for M6.4 (Quit-while-connected).
+- ErrorCard must replace ProvisioningView's inline error card to prevent duplication.
+- Reduced motion: all animations → `fadeIn 200ms` via token overrides (already handled by tokens.css).
 
-### D. Input Sources
+### D. Verified Facts
 
-- Milestone M5.4 in `docs/milestone/2026-03-04-1726-milestone.md`
-- UX Design §4.D (provisioning stepper spec)
-- UI Design §4.B (stepper wireframe), §4.C (provisioning state wireframe), §4.D (error state wireframe)
+| # | What was tested | Result | Decision |
+| --- | --- | --- | --- |
+| 1 | ProvisioningView error card structure | Uses Liquid Glass 4-layer with `provisioning-error-card` CSS class, Cancel/Retry GlassButtons | Extract into reusable ErrorCard |
+| 2 | GlassButton variant support | All 5 variants implemented with tint, text color, dark mode, focus ring | Reuse for dialog buttons |
+| 3 | Design tokens for overlay/modal | `--z-overlay: 300`, `--z-modal: 400`, `--blur-overlay: 8px` exist | Use tokens, no hardcoded values |
+| 4 | Global Esc handler in App.tsx | `document.addEventListener("keydown", ...)` hides window on Esc | ConfirmDialog must `stopPropagation` on Esc to close dialog first |
+| 5 | ConnectedView disconnect flow | Direct `invoke("disconnect")` on button click, error as `<p>` text | Wrap with ConfirmDialog, replace error with ErrorCard |
 
-### E. Verified Facts
+### E. Unverified Assumptions
 
-1. **Backend connect is single async IPC** -- confirmed by reading `connect.rs` and `server.rs`. No `emit` or `AppHandle` usage anywhere in `server_lifecycle/`
-2. **Error codes map to stepper steps** -- confirmed from `error.rs`:
-   - `PROVIDER_PROVISIONING_FAILED` → Step 1 (Creating server)
-   - `TUNNEL_SETUP_FAILED` → Step 3 (Connecting tunnel)
-   - Others (`KEYCHAIN_*`, `INTERNAL_*`) → Step 1
-3. **AppError serializes as `{ code, message, details }`** -- confirmed from `error.rs` `#[derive(Serialize)]`
-4. **Existing component patterns** -- Liquid Glass 4-layer sandwich verified in `GlassButton.tsx`, `SessionCard.tsx`, `liquid-glass.css`
-5. **Navigation API** -- `useNavigation()` provides `push(id, title, component)` and `pop()`, confirmed from `stack-context.tsx`
-6. **DisconnectedView placeholder** -- `ConnectingView` exists as local function, pushes after `invoke("connect")` succeeds (line ~109)
+None. All patterns verified from existing codebase.
 
-### F. Unverified Assumptions
-
-1. **Tauri 2 `app.emit()` available inside `#[tauri::command]` via `app: tauri::AppHandle`** -- Risk: low. Tauri 2 docs confirm this pattern. Fallback: use `tauri::Window` instead
-2. **`@tauri-apps/api/event` `listen()` works in webview** -- Risk: low. Standard Tauri 2 frontend API. Fallback: use `window.listen()` from `@tauri-apps/api/window`
+---
 
 ## 2. Architecture
 
 ### A. Diagram
 
 ```mermaid
-sequenceDiagram
-    participant DV as DisconnectedView
-    participant PV as ProvisioningView
-    participant PS as ProvisioningStepper
-    participant IPC as Tauri IPC
-    participant SL as ServerLifecycle
+graph TD
+    subgraph components["src/components/"]
+        CD["ConfirmDialog.tsx (new)"]
+        EC["ErrorCard.tsx (new)"]
+        GB["GlassButton.tsx (existing)"]
+    end
 
-    DV->>PV: push(provider, region)
-    PV->>IPC: invoke("connect")
-    PV->>IPC: listen("connect-progress")
+    subgraph views["src/views/"]
+        CV["ConnectedView.tsx (modify)"]
+        PV["ProvisioningView.tsx (modify)"]
+    end
 
-    SL-->>IPC: emit step 1 "Creating server"
-    IPC-->>PV: event {step: 1}
-    PV->>PS: step 1 active
-
-    SL-->>IPC: emit step 2 "Installing WireGuard"
-    IPC-->>PV: event {step: 2}
-    PV->>PS: step 1 done, step 2 active
-
-    SL-->>IPC: emit step 3 "Connecting tunnel"
-    IPC-->>PV: event {step: 3}
-    PV->>PS: step 2 done, step 3 active
-
-    SL-->>IPC: connect OK → SessionStatus
-    PV->>PS: all done
-    PV->>DV: push ConnectedView
-
-    Note over PV,PS: On error: map error code → failed step
+    CV -->|uses| CD
+    CV -->|uses| EC
+    CV -->|uses| GB
+    PV -->|uses| EC
+    PV -->|uses| GB
+    CD -->|uses| GB
 ```
 
 ### B. Decisions
 
-1. **`AppHandle` as parameter to `connect()`** -- not stored in `ServerLifecycle` struct. Only `connect` needs emit; struct change is unnecessary. (Principle: Single Responsibility)
-2. **ProvisioningView owns connect lifecycle** -- separated from DisconnectedView. The view that shows progress must own the IPC call and event listener. (Principle: Single Responsibility)
-3. **ProvisioningStepper is pure UI** -- receives `currentStep` and `failedStep` as props. No IPC knowledge. (Principle: Composition over Inheritance)
-4. **Error code mapping in ProvisioningView** -- maps `AppError.code` to failed step number. Stepper only knows step numbers. (Principle: Dependency Inversion)
+1. **ConfirmDialog as generic modal** -- Props: `open`, `title`, `message`, `confirmLabel`, `confirmVariant`, `onConfirm`, `onCancel`. Reusable for M6.4.
+   - *Principle 4 (Composition)*: small composable unit, not dialog-per-use-case.
+2. **ErrorCard extracted from ProvisioningView** -- Props: `message`, `variant` (`error|warning`, default `error`), `children` (ReactNode action slot).
+   - *Principle 3 (Single Responsibility)*: one component for error display. Variant controls tint color -- `error` for provisioning/generic failures, `warning` for persistent destruction failure with console URL.
+3. **Overlay = absolute inside popover** -- Not a React Portal.
+   - *Principle 1 (Explicit over Implicit)*: no hidden DOM teleportation in a 320px popover.
+4. **Esc key handling** -- ConfirmDialog captures Esc via `onKeyDown` with `stopPropagation` to prevent popover hide.
+   - *Principle 5 (Fail Fast)*: keyboard behavior is explicit, not inherited by accident.
 
 ### C. Boundaries
 
-| File | Responsibility |
-| --- | --- |
-| `connect.rs` | Emit `connect-progress` events at 3 points in the 11-step flow |
-| `server.rs` | Pass `AppHandle` from IPC command to `ServerLifecycle::connect()` |
-| `ipc.ts` | `ConnectProgress` type definition |
-| `ProvisioningStepper.tsx` + `.css` | Pure UI: 3-step vertical stepper with 4 states, connector lines |
-| `ProvisioningView.tsx` + `.css` | Orchestrator: invoke connect, listen to events, error handling, navigation |
-| `DisconnectedView.tsx` | Push ProvisioningView on Connect click (remove inline connect logic) |
-
-### D. Emit Points (connect.rs 11-step mapping)
-
-| Stepper Step | Emit Location | connect.rs Steps Covered |
+| Component | Responsibility | Props |
 | --- | --- | --- |
-| 1 "Creating server" | Before Step 3 (SSH key generation) | 1--7 (verify → provision) |
-| 2 "Installing WireGuard" | After Step 7 (server created) | 8--9 (SSH cleanup) |
-| 3 "Connecting tunnel" | Before Step 10 (tunnel up) | 10--11 (tunnel → session) |
+| `ConfirmDialog` | Blur overlay + glass dialog card + Cancel/Confirm buttons + keyboard trap | `open`, `title`, `message`, `confirmLabel`, `confirmVariant`, `onConfirm`, `onCancel` |
+| `ErrorCard` | Liquid Glass error/warning card + message + action slot | `message`, `variant` (`error \| warning`), `children` (action buttons) |
+| `ConnectedView` | Wire ConfirmDialog before disconnect, ErrorCard for disconnect errors | `initialSession` (unchanged) |
 
-### E. Error Code → Failed Step Mapping
-
-| Error Code | Failed Step | Rationale |
-| --- | --- | --- |
-| `PROVIDER_PROVISIONING_FAILED` | 1 | Server creation failed |
-| `TUNNEL_SETUP_FAILED` | 3 | WireGuard tunnel failed |
-| All others | 1 | Pre-provisioning failure (Keychain, SSH, etc.) |
+---
 
 ## 3. Steps
 
-### Step 1: Backend emit -- connect.rs + IPC
+### Step 1: Create ConfirmDialog Component
 
-- [x] **Status**: completed at 2026-03-05T19:30:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/connect.rs`, `src-tauri/src/ipc/server.rs`
+- [x] **Status**: completed at 2026-03-05T19:52:00+07:00
+- **Scope**: `src/components/ConfirmDialog.tsx`, `src/components/ConfirmDialog.css`
 - **Dependencies**: none
-- **Description**: Add `AppHandle` parameter to `ServerLifecycle::connect()`. Insert 3 `app.emit("connect-progress", payload)` calls at the mapped locations. Update the `connect` IPC command in `server.rs` to extract `app: tauri::AppHandle` and pass it to `lifecycle.connect()`. Define a serializable `ConnectProgress` struct in `connect.rs` (or `types.rs`).
+- **Description**: Create a reusable modal confirmation dialog with blur overlay, Liquid Glass card, Cancel + Confirm buttons. Handle Esc key (close dialog, stopPropagation), Enter key (confirm), focus trap, and reduced motion. Render only when `open` is true.
 - **Acceptance Criteria**:
-  - `ServerLifecycle::connect()` accepts `app: &tauri::AppHandle` parameter
-  - `ConnectProgress { step: u8 }` struct defined with `#[derive(Clone, Serialize)]`
-  - 3 emit calls at correct locations (before step 3, after step 7, before step 10)
-  - `server.rs` IPC command passes `AppHandle` to connect
-  - `cargo check` passes
+  - Blur overlay (`backdrop-filter: blur(8px)`) at `z-index: var(--z-overlay)`
+  - Dialog card at `z-index: var(--z-modal)` with Liquid Glass 4-layer sandwich
+  - Cancel (neutral GlassButton) + Confirm (configurable variant GlassButton)
+  - Esc closes dialog via `stopPropagation` (does not hide popover)
+  - Enter triggers confirm action
+  - `aria-modal="true"`, `role="alertdialog"`, `aria-labelledby`, `aria-describedby`
+  - Overlay click triggers cancel (click outside to dismiss)
+  - Fade-in animation: `fadeIn var(--duration-fast) var(--easing-smooth)`
+  - Dark mode: tint and text colors via existing tokens
+  - Reduced motion: handled by tokens.css duration overrides
 
-### Step 2: Frontend types -- ConnectProgress
+### Step 2: Create ErrorCard Component + Refactor ProvisioningView
 
-- [x] **Status**: completed at 2026-03-05T19:31:00+07:00
-- **Scope**: `src/types/ipc.ts`
-- **Dependencies**: none
-- **Description**: Add `ConnectProgress` interface matching the Rust struct. Add `AppError` interface for typed error handling in ProvisioningView.
+- [x] **Status**: completed at 2026-03-05T19:53:00+07:00
+- **Scope**: `src/components/ErrorCard.tsx`, `src/components/ErrorCard.css`, `src/views/ProvisioningView.tsx`, `src/views/ProvisioningView.css`
+- **Dependencies**: none (parallel-safe with Step 1, but executed sequentially)
+- **Description**: Extract the inline error card from ProvisioningView into a standalone ErrorCard component. Replace ProvisioningView's hardcoded error card markup with ErrorCard. ErrorCard uses Liquid Glass 4-layer sandwich with error tint and accepts children as action slot.
 - **Acceptance Criteria**:
-  - `ConnectProgress { step: number }` type exported
-  - `AppError { code: string; message: string; details?: unknown }` type exported
-  - Existing types unchanged
+  - ErrorCard renders Liquid Glass 4-layer with variant-based tint (`--color-error-tint` or `--color-warning-tint`)
+  - Props: `message: string`, `variant: "error" | "warning"` (default `"error"`), `children: ReactNode` (action buttons slot)
+  - ProvisioningView uses `<ErrorCard message={errorMessage}>` with Cancel/Retry GlassButtons as children
+  - ProvisioningView behavior unchanged after refactor (visual regression: none)
+  - CSS classes moved from `ProvisioningView.css` to `ErrorCard.css`
+  - Dark mode: error text color via existing dark mode tokens
 
-### Step 3: ProvisioningStepper component
+### Step 3: Integrate into ConnectedView
 
-- [x] **Status**: completed at 2026-03-05T19:34:00+07:00
-- **Scope**: `src/components/ProvisioningStepper.tsx`, `src/components/ProvisioningStepper.css`
-- **Dependencies**: none
-- **Description**: Build a pure UI component that renders a 3-step vertical stepper. Props: `currentStep` (1-3, or 0 for all waiting), `failedStep` (null or step number), `errorMessage` (null or string). Each step shows a circle (with icon/number), title, and optional description. Connector lines between steps. Liquid Glass styling with warning tint on active, success tint on done, error tint on failed.
+- [x] **Status**: completed at 2026-03-05T19:55:00+07:00
+- **Scope**: `src/views/ConnectedView.tsx`, `src/views/ConnectedView.css`
+- **Dependencies**: Step 1, Step 2
+- **Description**: Wire ConfirmDialog into ConnectedView's disconnect flow: disconnect button → show ConfirmDialog → on confirm → invoke disconnect IPC. Replace the plain `<p>` error display with ErrorCard + Retry button.
 - **Acceptance Criteria**:
-  - 3 steps rendered: "Creating server", "Installing WireGuard", "Connecting tunnel"
-  - Step states: done (✓ green, description "Completed"), active (spinner amber, description "In progress..."), waiting (number gray, no description), failed (✕ red, error message inline)
-  - Vertical layout with connector lines between step circles
-  - Liquid Glass tinting per state
-  - Dark mode support via CSS custom properties
-  - Reduced motion: spinner uses `animation-duration: 1.5s`
-  - Keyboard accessible (no interactive elements -- display only)
+  - Disconnect button shows ConfirmDialog with title "Disconnect", message "Server will be destroyed. Continue?", confirmLabel "Destroy", confirmVariant "error"
+  - Cancel returns to connected view (dialog closes)
+  - Confirm triggers `invoke("disconnect")` with loading state on Destroy button
+  - On disconnect error (generic): ErrorCard with `error` variant, error message + Retry button
+  - On disconnect error (persistent destruction failure -- `PROVIDER_DESTRUCTION_FAILED`): ErrorCard with `warning` variant, error message + provider console URL from `AppError.details` + manual deletion guide text (no retry -- session preserved for later attempt)
+  - Retry (generic error) re-opens ConfirmDialog (or re-invokes disconnect -- user choice to confirm again)
+  - Remove old `<p className="connected-view__error">` markup
+  - Remove unused `connected-view__error` CSS rule
 
-### Step 4: ProvisioningView + DisconnectedView update
-
-- [x] **Status**: completed at 2026-03-05T19:38:00+07:00
-- **Scope**: `src/views/ProvisioningView.tsx`, `src/views/ProvisioningView.css`, `src/views/DisconnectedView.tsx`, `src/views/DisconnectedView.css`
-- **Dependencies**: Step 1, Step 2, Step 3
-- **Description**: Create `ProvisioningView` that: (a) on mount, calls `invoke("connect")` and `listen("connect-progress")`, (b) updates `ProvisioningStepper` on each progress event, (c) on success pushes `ConnectedView`, (d) on failure maps error code to failed step and shows error card with Cancel/Retry buttons. Update `DisconnectedView` to push `ProvisioningView` with provider/region props instead of calling connect inline. Remove the placeholder `ConnectingView`.
-- **Acceptance Criteria**:
-  - ProvisioningView: status badge ("PROVISIONING..." with amber dot, changes to "PROVISIONING FAILED" with red dot on error)
-  - ProvisioningView: region info line (e.g., "Frankfurt · Hetzner")
-  - ProvisioningView: renders ProvisioningStepper with live state
-  - ProvisioningView: listens to `connect-progress` events, updates currentStep
-  - ProvisioningView: on connect success → push ConnectedView with SessionStatus
-  - ProvisioningView: on connect failure → map error code to failedStep, show error message
-  - ProvisioningView: Cancel button (pops back to DisconnectedView)
-  - ProvisioningView: Retry button on failure (re-invokes connect)
-  - ProvisioningView: cleans up event listener on unmount
-  - DisconnectedView: Connect click pushes ProvisioningView (no inline invoke)
-  - DisconnectedView: placeholder ConnectingView removed
-  - DisconnectedView.css: placeholder CSS removed
-  - Liquid Glass styling on error card
-  - Dark mode support
-
-### Step 5: Verify build and lint
-
-- [x] **Status**: completed at 2026-03-05T19:39:00+07:00
-- **Scope**: project-wide verification
-- **Dependencies**: Step 4
-- **Description**: Run `cargo check` for Rust backend and `bun run check` (or `npx tsc --noEmit`) for TypeScript frontend. Fix any compilation or type errors.
-- **Acceptance Criteria**:
-  - `cargo check` exits 0
-  - TypeScript type check exits 0
-  - No new warnings introduced
+---
 
 ## 4. Execution Strategy
 
-| Step | Chain | Complexity | Rationale |
-| --- | --- | --- | --- |
-| 1 | Direct | Simple | 2 files, parameter addition + 3 emit lines |
-| 2 | Direct | Trivial | 2 type additions to existing file |
-| 3 | Direct | Medium | New component + CSS, single concern, follows existing patterns |
-| 4 | Direct | Medium | New view + existing view refactor, event wiring |
-| 5 | Direct | Trivial | Build verification commands |
+| Step | Chain | Rationale |
+| --- | --- | --- |
+| 1 | Direct | Single new component + CSS, clear pattern from existing GlassButton/ProvisioningView |
+| 2 | Direct | Extract + refactor within 2 files, mechanical change |
+| 3 | Direct | Wire existing components into ConnectedView, 1 file modify |
 
-**Execution order**: 1 → 2 → 3 → 4 → 5 (sequential)
+### A. Execution Order
 
-**All steps Direct** -- every step touches 1-3 files with clear scope. Subagent chain overhead exceeds the benefit for this granularity.
+```plain
+Step 1 ─┐
+Step 2 ─┘→ Step 3 (depends on both)
+```
 
-**Risk flags**:
+Sequential execution: Step 1 → Step 2 → Step 3.
 
-- Step 1: `AppHandle` parameter pattern in Tauri 2 `#[tauri::command]` -- low risk, standard Tauri pattern
-- Step 4: Event listener cleanup timing -- must unlisten before component unmount to prevent stale updates
+### B. Estimated Complexity
+
+| Step | Tier | Notes |
+| --- | --- | --- |
+| 1 | Simple | ~150 lines TSX + ~80 lines CSS |
+| 2 | Simple | Extract + replace, ~100 lines TSX + ~40 lines CSS, mechanical refactor |
+| 3 | Simple | ~30 lines changed in ConnectedView |
+
+### C. Risk Flags
+
+- **ProvisioningView regression** (Step 2): extracting inline error card could break styling. Mitigate by keeping identical CSS class names in ErrorCard.css.
 
 ---
