@@ -1,0 +1,199 @@
+/* LIQUID GLASS STYLES
+   Source: lucasromerodb/liquid-glass-effect-macos (as-is)
+   ================================================================ */
+
+.liquidGlass-wrapper {
+  position: relative;
+  display: flex;
+  font-weight: 600;
+  overflow: hidden;
+
+  color: black;
+  cursor: pointer;
+
+  box-shadow: 0 6px 6px rgba(0, 0, 0, 0.2), 0 0 20px rgba(0, 0, 0, 0.1);
+
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 2.2);
+}
+
+.liquidGlass-effect {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+
+  backdrop-filter: blur(3px);
+  filter: url(#glass-distortion);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.liquidGlass-tint {
+  z-index: 1;
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.liquidGlass-shine {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+
+  overflow: hidden;
+
+  box-shadow: inset 2px 2px 1px 0 rgba(255, 255, 255, 0.5),
+    inset -1px -1px 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+.liquidGlass-text {
+  z-index: 3;
+  color: black;
+}
+
+/* ── Shape: Menu (reference as-is) ───────────────────────────────── */
+
+.menu,
+.menu > div {
+  padding: 0.4rem;
+  border-radius: 1.8rem;
+}
+
+.menu:hover {
+  padding: 0.6rem;
+  border-radius: 1.8rem;
+}
+
+.menu > div > div {
+  font-size: 20px;
+  color: white;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.8rem;
+  transition: all 0.1s ease-in;
+}
+
+.menu > div > div:hover {
+  background-color: rgba(255, 255, 255, 0.5);
+  box-shadow: inset -2px -2px 2px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(2px);
+}
+
+/* ── Shape: Button (reference as-is) ─────────────────────────────── */
+
+.button {
+  padding: 1.5rem 2.5rem;
+  border-radius: 3rem;
+}
+
+.button,
+.button > div {
+  border-radius: 3rem;
+}
+
+.button:hover {
+  padding: 1.8rem 2.8rem;
+}
+
+.button:hover > div {
+  border-radius: 4rem;
+}
+
+/* ── Shape: Popover (Oh My VPN) ──────────────────────────────────── */
+
+.popover {
+  border-radius: 12px;
+  cursor: default;
+}
+
+.popover,
+.popover > div {
+  border-radius: 12px;
+}
+
+.popover .liquidGlass-text {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  width: 320px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Helvetica Neue', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  color: #1a1a1a;
+  scrollbar-width: none;
+}
+
+.popover .liquidGlass-text::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Shape: Glass Button (Oh My VPN) ─────────────────────────────── */
+
+.glass-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+}
+
+.glass-btn,
+.glass-btn > div {
+  border-radius: 8px;
+}
+
+.glass-btn:hover {
+  padding: 0.6rem 1.1rem;
+}
+
+.glass-btn:hover > div {
+  border-radius: 10px;
+}
+
+.glass-btn .liquidGlass-tint {
+  background: rgba(255, 255, 255, 0.30);
+}
+
+.glass-btn .liquidGlass-text {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Helvetica Neue', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a1a;
+  text-align: center;
+  padding: 0;
+}
+
+/* ── Dark Mode ───────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  .liquidGlass-tint {
+    background: rgba(0, 0, 0, 0.20);
+  }
+
+  .liquidGlass-shine {
+    box-shadow: inset 2px 2px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 1px 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .liquidGlass-text {
+    color: #e8e8ed;
+  }
+
+  .popover .liquidGlass-text {
+    color: #e8e8ed;
+  }
+
+  .glass-btn .liquidGlass-tint {
+    background: rgba(255, 255, 255, 0.10);
+  }
+
+  .glass-btn .liquidGlass-text {
+    color: #e8e8ed;
+  }
+}
+
+/* ── Reduced Motion ──────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .liquidGlass-wrapper {
+    transition: opacity 200ms linear;
+  }
+}

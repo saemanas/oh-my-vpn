@@ -1,0 +1,112 @@
+/* ===================================================================
+   StackNavigator -- Slide transitions for push/pop navigation
+   Uses design tokens from tokens.css (imported globally in main.tsx)
+   =================================================================== */
+
+/* ── Container ─────────────────────────────────────────────────────── */
+
+.stack-navigator {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── View Layers ───────────────────────────────────────────────────── */
+
+/* Idle view stays in flow to give the container natural height */
+.stack-view {
+  width: 100%;
+  will-change: transform;
+}
+
+/* During transitions, both views are positioned absolutely to overlap */
+.stack-view.stack-entering-push,
+.stack-view.stack-entering-pop,
+.stack-view.stack-exiting-push,
+.stack-view.stack-exiting-pop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+}
+
+/* ── Push: incoming slides from right ─────────────────────────────── */
+
+.stack-entering-push {
+  transform: translateX(100%);
+  z-index: 2;
+}
+
+.stack-entering-push.stack-active {
+  transform: translateX(0);
+  transition: transform var(--duration-slow) var(--easing-spring);
+}
+
+/* ── Push: outgoing slides left (partial, depth cue) ──────────────── */
+
+.stack-exiting-push {
+  transform: translateX(0);
+  z-index: 1;
+}
+
+.stack-exiting-push.stack-active {
+  transform: translateX(-30%);
+  transition: transform var(--duration-slow) var(--easing-spring);
+}
+
+/* ── Pop: incoming slides from left ───────────────────────────────── */
+
+.stack-entering-pop {
+  transform: translateX(-30%);
+  z-index: 1;
+}
+
+.stack-entering-pop.stack-active {
+  transform: translateX(0);
+  transition: transform var(--duration-slow) var(--easing-spring);
+}
+
+/* ── Pop: outgoing slides right (exits to right edge) ─────────────── */
+
+.stack-exiting-pop {
+  transform: translateX(0);
+  z-index: 2;
+}
+
+.stack-exiting-pop.stack-active {
+  transform: translateX(100%);
+  transition: transform var(--duration-slow) var(--easing-spring);
+}
+
+/* ── Reduced Motion ────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .stack-entering-push,
+  .stack-entering-pop {
+    transform: none;
+    opacity: 0;
+    z-index: 2;
+  }
+
+  .stack-entering-push.stack-active,
+  .stack-entering-pop.stack-active {
+    opacity: 1;
+    transform: none;
+    transition: opacity 200ms linear;
+  }
+
+  .stack-exiting-push,
+  .stack-exiting-pop {
+    transform: none;
+    opacity: 1;
+    z-index: 1;
+  }
+
+  .stack-exiting-push.stack-active,
+  .stack-exiting-pop.stack-active {
+    opacity: 0;
+    transform: none;
+    transition: opacity 200ms linear;
+  }
+}
