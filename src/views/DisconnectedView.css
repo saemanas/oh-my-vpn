@@ -20,11 +20,6 @@
   line-height: 1.5;
 }
 
-.disconnected-error__message--connect {
-  /* Connect-level error: sits between region list and connect button */
-  margin-top: calc(var(--space-1) * -1);
-}
-
 .disconnected-region-error {
   display: flex;
   flex-direction: column;
@@ -40,17 +35,4 @@
   line-height: 1.5;
 }
 
-/* ── Connecting placeholder (M5.4 target) ─────────────────────────────────── */
 
-.disconnected-connecting-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-}
-
-.disconnected-connecting-placeholder p {
-  margin: 0;
-  font-size: var(--font-size-body-sm);
-  color: var(--color-text-secondary);
-}

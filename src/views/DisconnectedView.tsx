@@ -4,18 +4,9 @@ import { GlassButton } from "../components/GlassButton";
 import { ProviderSelector } from "../components/ProviderSelector";
 import { RegionList } from "../components/RegionList";
 import { useNavigation } from "../navigation/stack-context";
-import type { Provider, ProviderInfo, RegionInfo, SessionStatus, UserPreferences } from "../types/ipc";
+import type { Provider, ProviderInfo, RegionInfo, UserPreferences } from "../types/ipc";
+import { ProvisioningView } from "./ProvisioningView";
 import "./DisconnectedView.css";
-
-// ── Placeholder for M5.4 ───────────────────────────────────────────────────
-
-function ConnectingView() {
-	return (
-		<div className="disconnected-connecting-placeholder">
-			<p>Connecting...</p>
-		</div>
-	);
-}
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -44,10 +35,8 @@ export function DisconnectedView() {
 	const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
 	const [isLoadingProviders, setIsLoadingProviders] = useState(true);
 	const [isLoadingRegions, setIsLoadingRegions] = useState(false);
-	const [isConnecting, setIsConnecting] = useState(false);
 	const [providerError, setProviderError] = useState<string | null>(null);
 	const [regionError, setRegionError] = useState<string | null>(null);
-	const [connectError, setConnectError] = useState<string | null>(null);
 
 	// ── IPC: list_providers ────────────────────────────────────────────────
 
@@ -118,27 +107,28 @@ export function DisconnectedView() {
 		[],
 	);
 
-	// ── IPC: connect ───────────────────────────────────────────────────────
+	// ── Navigate to ProvisioningView ───────────────────────────────────────
 
-	const handleConnect = useCallback(async () => {
+	const handleConnect = useCallback(() => {
 		if (!selectedProvider || !selectedRegion) return;
 
-		setIsConnecting(true);
-		setConnectError(null);
+		// Build region label from the selected region's display name + provider
+		const regionInfo = regions.find((r) => r.region === selectedRegion);
+		const regionDisplayName = regionInfo?.displayName ?? selectedRegion;
+		const providerLabel =
+			selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1);
+		const regionLabel = `${regionDisplayName} · ${providerLabel}`;
 
-		try {
-			await invoke<SessionStatus>("connect", {
-				provider: selectedProvider,
-				region: selectedRegion,
-			});
-			// M5.4 will replace ConnectingView with the real ProvisioningView
-			push("provisioning", "Provisioning", <ConnectingView />);
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			setConnectError(message);
-			setIsConnecting(false);
-		}
-	}, [selectedProvider, selectedRegion, push]);
+		push(
+			"provisioning",
+			"Provisioning",
+			<ProvisioningView
+				provider={selectedProvider}
+				regionLabel={regionLabel}
+				regionCode={selectedRegion}
+			/>,
+		);
+	}, [selectedProvider, selectedRegion, regions, push]);
 
 	// ── Provider selection handler ─────────────────────────────────────────
 
@@ -146,7 +136,6 @@ export function DisconnectedView() {
 		(provider: Provider) => {
 			if (provider === selectedProvider) return;
 			setSelectedProvider(provider);
-			setConnectError(null);
 		},
 		[selectedProvider],
 	);
@@ -155,7 +144,6 @@ export function DisconnectedView() {
 
 	const handleSelectRegion = useCallback((region: string) => {
 		setSelectedRegion(region);
-		setConnectError(null);
 	}, []);
 
 	// ── Effects ────────────────────────────────────────────────────────────
@@ -196,8 +184,7 @@ export function DisconnectedView() {
 
 	// ── Derived state ──────────────────────────────────────────────────────
 
-	const isConnectDisabled =
-		!selectedProvider || !selectedRegion || isConnecting;
+	const isConnectDisabled = !selectedProvider || !selectedRegion;
 
 	const showProviderSelector = providers.length > 1;
 
@@ -283,18 +270,10 @@ export function DisconnectedView() {
 				/>
 			)}
 
-			{/* Connect error */}
-			{connectError && (
-				<p className="disconnected-error__message disconnected-error__message--connect" role="alert">
-					{connectError}
-				</p>
-			)}
-
 			{/* Connect button */}
 			<GlassButton
 				variant="success"
-				onClick={() => void handleConnect()}
-				loading={isConnecting}
+				onClick={handleConnect}
 				disabled={isConnectDisabled}
 			>
 				Connect

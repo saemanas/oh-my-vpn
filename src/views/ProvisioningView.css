@@ -1,0 +1,110 @@
+/* ── ProvisioningView layout ──────────────────────────────────────────────── */
+
+.provisioning-view {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+/* ── Status badge ─────────────────────────────────────────────────────────── */
+
+.provisioning-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.provisioning-status-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.provisioning-status-dot--active {
+	background: var(--color-warning-text);
+	animation: provisioning-pulse 1.5s ease-in-out infinite;
+}
+
+.provisioning-status-dot--error {
+	background: var(--color-error-text);
+}
+
+@keyframes provisioning-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.4;
+	}
+}
+
+.provisioning-status-text {
+	font-size: var(--font-size-caption);
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	color: var(--color-text-secondary);
+}
+
+/* ── Region info ──────────────────────────────────────────────────────────── */
+
+.provisioning-region {
+	margin: 0;
+	font-size: var(--font-size-body-sm);
+	color: var(--color-text-secondary);
+}
+
+/* ── Error card (Liquid Glass) ────────────────────────────────────────────── */
+
+.provisioning-error-card {
+	margin-top: var(--space-2);
+}
+
+.provisioning-error-card__tint {
+	background: var(--color-error-tint);
+}
+
+.provisioning-error-card__content {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-3);
+}
+
+.provisioning-error-card__message {
+	margin: 0;
+	font-size: var(--font-size-body-sm);
+	color: var(--color-error-text);
+	line-height: 1.5;
+}
+
+.provisioning-error-card__actions {
+	display: flex;
+	gap: var(--space-2);
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+	.provisioning-status-dot--active {
+		background: #fbbf24;
+	}
+
+	.provisioning-status-dot--error {
+		background: #f87171;
+	}
+
+	.provisioning-error-card__message {
+		color: #f87171;
+	}
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+	.provisioning-status-dot--active {
+		animation: none;
+		opacity: 1;
+	}
+}

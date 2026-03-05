@@ -17,6 +17,7 @@ use crate::types::{OrphanAction, OrphanedServer, Provider};
 /// Returns a `SessionStatus` JSON object on success.
 #[tauri::command]
 pub async fn connect(
+    app: tauri::AppHandle,
     lifecycle: tauri::State<'_, ServerLifecycle>,
     registry: tauri::State<'_, Mutex<ProviderRegistry>>,
     provider: Provider,
@@ -47,7 +48,7 @@ pub async fn connect(
     }
 
     // Delegate to ServerLifecycle::connect().
-    let status = lifecycle.connect(provider, &region, registry.inner()).await?;
+    let status = lifecycle.connect(provider, &region, registry.inner(), &app).await?;
     Ok(status)
 }
 

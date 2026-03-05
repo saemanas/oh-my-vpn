@@ -1,0 +1,198 @@
+/* ProvisioningStepper -- vertical 3-step stepper for provisioning flow.
+   Uses Liquid Glass tint variables from tokens.css for state colors. */
+
+/* ── Container ────────────────────────────────────────────────────────────── */
+
+.stepper {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+/* ── Step row ─────────────────────────────────────────────────────────────── */
+
+.stepper-step {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 12px;
+}
+
+/* ── Indicator column (circle + connector) ────────────────────────────────── */
+
+.stepper-indicator {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	flex-shrink: 0;
+	width: 28px;
+}
+
+/* ── Circle ───────────────────────────────────────────────────────────────── */
+
+.stepper-circle {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	font-size: 13px;
+	font-weight: 600;
+	transition: background 300ms ease, color 300ms ease;
+}
+
+/* State: done -- green tint */
+.stepper-circle--done {
+	background: var(--color-success-tint);
+	color: var(--color-success-text);
+}
+
+/* State: active -- amber tint */
+.stepper-circle--active {
+	background: var(--color-warning-tint);
+	color: var(--color-warning-text);
+}
+
+/* State: waiting -- gray */
+.stepper-circle--waiting {
+	background: rgba(0, 0, 0, 0.06);
+	color: var(--color-text-tertiary);
+}
+
+/* State: failed -- red tint */
+.stepper-circle--failed {
+	background: var(--color-error-tint);
+	color: var(--color-error-text);
+}
+
+/* ── Circle content ───────────────────────────────────────────────────────── */
+
+.stepper-icon {
+	font-size: 14px;
+	line-height: 1;
+}
+
+.stepper-number {
+	font-size: 13px;
+	line-height: 1;
+}
+
+/* ── Spinner ──────────────────────────────────────────────────────────────── */
+
+@keyframes stepper-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.stepper-spinner {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	border: 2px solid rgba(0, 0, 0, 0.1);
+	border-top-color: currentColor;
+	border-radius: 50%;
+	animation: stepper-spin 0.8s linear infinite;
+}
+
+/* ── Connector line ───────────────────────────────────────────────────────── */
+
+.stepper-connector {
+	width: 2px;
+	height: 28px;
+	background: rgba(0, 0, 0, 0.08);
+	transition: background 300ms ease;
+}
+
+.stepper-connector--done {
+	background: var(--color-success-tint);
+}
+
+.stepper-connector--active {
+	background: var(--color-warning-tint);
+}
+
+/* ── Content column (title + description) ─────────────────────────────────── */
+
+.stepper-content {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 4px;
+	padding-bottom: 16px;
+	min-height: 28px;
+}
+
+.stepper-title {
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 1.4;
+	color: var(--color-text-primary);
+}
+
+.stepper-title--waiting {
+	color: var(--color-text-tertiary);
+}
+
+.stepper-description {
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.stepper-description--done {
+	color: var(--color-success-text);
+}
+
+.stepper-description--active {
+	color: var(--color-warning-text);
+}
+
+.stepper-description--failed {
+	color: var(--color-error-text);
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+	.stepper-circle--waiting {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	.stepper-connector {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	.stepper-spinner {
+		border-color: rgba(255, 255, 255, 0.1);
+		border-top-color: currentColor;
+	}
+
+	.stepper-description--done {
+		color: #4ade80;
+	}
+
+	.stepper-description--active {
+		color: #fbbf24;
+	}
+
+	.stepper-description--failed {
+		color: #f87171;
+	}
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+	.stepper-spinner {
+		animation-duration: 1.5s;
+	}
+
+	.stepper-circle,
+	.stepper-connector {
+		transition: none;
+	}
+}

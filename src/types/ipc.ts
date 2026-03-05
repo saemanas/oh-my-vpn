@@ -102,6 +102,29 @@ export interface UserPreferences {
 }
 
 /**
+ * Progress event payload emitted during the connect flow.
+ * Mirrors Rust `ConnectProgress` struct in connect.rs.
+ *
+ * Steps:
+ *   1 -- Creating server (SSH + provisioning)
+ *   2 -- Installing WireGuard (SSH cleanup)
+ *   3 -- Connecting tunnel (WireGuard up + session)
+ */
+export interface ConnectProgress {
+  step: number;
+}
+
+/**
+ * Structured error returned by all IPC commands on failure.
+ * Mirrors Rust `AppError` struct (serde: camelCase).
+ */
+export interface AppError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+/**
  * An orphaned server detected on app launch.
  * Mirrors Rust `OrphanedServer` struct (serde: camelCase).
  */
