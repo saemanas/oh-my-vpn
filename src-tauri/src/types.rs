@@ -53,6 +53,7 @@ impl Provider {
 
 /// Cloud region with pricing information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegionInfo {
     /// Cloud region code (e.g., "fsn1", "us-east-1").
     pub region: String,
@@ -66,6 +67,7 @@ pub struct RegionInfo {
 
 /// Server information returned by cloud provider operations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerInfo {
     /// Provider-side server ID.
     pub server_id: String,
@@ -95,6 +97,7 @@ pub enum ProviderStatus {
 
 /// Provider information for UI display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderInfo {
     /// Which cloud provider.
     pub provider: Provider,

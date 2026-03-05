@@ -1,0 +1,167 @@
+/* GlassButton component styles.
+   Extends liquid-glass.css (.glass-btn) with variant tints, interaction
+   transforms, disabled/loading states, focus ring, and spinner animation.
+   Imported after liquid-glass.css so overrides apply correctly. */
+
+/* ── Variant tints ────────────────────────────────────────────────────────
+   Override the neutral tint defined in liquid-glass.css per variant.    */
+
+.glass-btn--success .liquidGlass-tint {
+  background: var(--color-success-tint);
+}
+
+.glass-btn--error .liquidGlass-tint {
+  background: var(--color-error-tint);
+}
+
+.glass-btn--warning .liquidGlass-tint {
+  background: var(--color-warning-tint);
+}
+
+.glass-btn--info .liquidGlass-tint {
+  background: var(--color-info-tint);
+}
+
+/* neutral variant uses the default from liquid-glass.css -- no override */
+
+/* ── Variant text colors ──────────────────────────────────────────────────
+   Applied via the .liquidGlass-text element inside each variant.        */
+
+.glass-btn--success .liquidGlass-text {
+  color: var(--color-success-text);
+}
+
+.glass-btn--error .liquidGlass-text {
+  color: var(--color-error-text);
+}
+
+.glass-btn--warning .liquidGlass-text {
+  color: var(--color-warning-text);
+}
+
+.glass-btn--info .liquidGlass-text {
+  color: var(--color-info-text);
+}
+
+/* ── Text layout: flex row for spinner + label ────────────────────────── */
+
+.glass-btn .liquidGlass-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ── Interaction transforms ───────────────────────────────────────────────
+   Scale on top of the padding expand already defined in liquid-glass.css. */
+
+.glass-btn:not(:disabled):hover {
+  transform: scale(1.02);
+}
+
+.glass-btn:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* ── Focus ring ───────────────────────────────────────────────────────── */
+
+.glass-btn:focus-visible {
+  outline: none;
+  /* Layered on top of the elevated shadow from .liquidGlass-wrapper */
+  box-shadow:
+    0 6px 6px rgba(0, 0, 0, 0.2),
+    0 0 20px rgba(0, 0, 0, 0.1),
+    0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+/* ── Disabled state ───────────────────────────────────────────────────── */
+
+.glass-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Undo the padding hover expand from liquid-glass.css when disabled */
+.glass-btn:disabled:hover {
+  padding: 0.5rem 1rem;
+  transform: none;
+}
+
+.glass-btn:disabled:hover > div {
+  border-radius: 8px;
+}
+
+/* ── Loading state ────────────────────────────────────────────────────── */
+
+/* Override variant tint with warning tint while loading */
+.glass-btn.glass-btn--loading .liquidGlass-tint {
+  background: var(--color-warning-tint);
+}
+
+/* Reset the text color to neutral while loading */
+.glass-btn.glass-btn--loading .liquidGlass-text {
+  color: var(--color-warning-text);
+}
+
+/* ── CSS spinner ──────────────────────────────────────────────────────── */
+
+@keyframes glass-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.glass-btn-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: glass-btn-spin 0.7s linear infinite;
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  .glass-btn--success .liquidGlass-text {
+    /* success-text in dark: lighten slightly for readability on dark glass */
+    color: #4ade80;
+  }
+
+  .glass-btn--error .liquidGlass-text {
+    color: #f87171;
+  }
+
+  .glass-btn--warning .liquidGlass-text {
+    color: #fbbf24;
+  }
+
+  .glass-btn--info .liquidGlass-text {
+    color: #60a5fa;
+  }
+
+  .glass-btn.glass-btn--loading .liquidGlass-text {
+    color: #fbbf24;
+  }
+
+  .glass-btn-spinner {
+    border-color: rgba(255, 255, 255, 0.15);
+    border-top-color: currentColor;
+  }
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-btn:not(:disabled):hover,
+  .glass-btn:not(:disabled):active {
+    transform: none;
+    transition: opacity 200ms linear;
+  }
+
+  .glass-btn-spinner {
+    animation-duration: 1.5s;
+  }
+}
