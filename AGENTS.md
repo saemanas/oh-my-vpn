@@ -117,7 +117,7 @@ Default phase (no tag) is `plan/execution`.
 | Command | Description |
 | --- | --- |
 | `cargo clean --manifest-path src-tauri/Cargo.toml` | Remove Rust build cache (`src-tauri/target/`). Forces full recompile on next run. |
-| `rm -rf node_modules && bun install` | Reset frontend dependencies |
+| `mv node_modules ~/.trash/ && bun install` | Reset frontend dependencies |
 
 ### E. Notes
 
