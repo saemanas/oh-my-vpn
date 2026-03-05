@@ -1,57 +1,57 @@
 ---
-task: "WireGuard Key Generation"
+task: "WireGuard Config File Management"
 milestone: "M3"
-module: "M3.1"
-created_at: "2026-03-05T01:15:00+07:00"
+module: "M3.2"
+created_at: "2026-03-05T11:30:00+07:00"
 status: "completed"
-branch: "feat/wireguard-key-generation"
+branch: "feat/wireguard-config"
 ---
 
-> **Status**: Completed at 2026-03-05T01:29+07:00
-> **Branch**: feat/wireguard-key-generation
+# WireGuard Config File Management
 
-# PLAN -- M3.1: WireGuard Key Generation
+> **Status**: Completed at 2026-03-05T11:43:00+07:00
+> **Branch**: feat/wireguard-config
 
 ## 1. Context
 
 ### A. Problem Statement
 
-Implement Curve25519 key pair generation for WireGuard VPN sessions. Keys are ephemeral -- generated per session, zeroed from memory after tunnel teardown. This is the foundation for M3.2 (config file) and M3.3 (wg-quick tunnel).
+M3.2 implements WireGuard configuration file lifecycle -- write INI config with permission 600, populate DNS for leak prevention, and delete after use. This bridges M3.1 (key generation) and M3.3 (wg-quick subprocess execution).
 
 ### B. Current State
 
-- `src-tauri/src/vpn_manager.rs` exists as an empty stub (doc comment only)
-- `lib.rs` declares `mod vpn_manager` with `#[allow(unused)]`
-- `x25519-dalek` 2.0.1 and `zeroize` 1.8.2 already added to `Cargo.toml`
-- `error.rs` has `TUNNEL_SETUP_FAILED` and `TUNNEL_TEARDOWN_FAILED` error codes
-- Data model defines `WireGuardKeyPair { private_key: [u8; 32], public_key: [u8; 32] }`
+- `src-tauri/src/vpn_manager/mod.rs` -- exists, exports `pub mod keys` only
+- `src-tauri/src/vpn_manager/keys.rs` -- M3.1 complete. `WireGuardKeyPair` with `private_key_base64()` / `public_key_base64()` methods
+- `src-tauri/src/error.rs` -- has `AppError`, `ProviderError`, `KeychainError`, `PreferencesError`. No `VpnError` yet
+- No `config.rs` exists yet
 
 ### C. Constraints
 
-- Keys must implement `Zeroize` + `ZeroizeOnDrop` (NFR-SEC-2)
-- Public key encoded to base64 for WireGuard INI config format
-- `StaticSecret` required (not `EphemeralSecret`) because only `StaticSecret` implements `Zeroize`
-- Private key bytes extracted via `StaticSecret::to_bytes()` for struct storage
+- Config file path: `/tmp/oh-my-vpn-wg0.conf` (data model §4.C)
+- Permission must be `0o600` immediately after write (NFR-SEC-6)
+- File deleted regardless of wg-quick success/failure (ADR-0001)
+- Only one active session at a time -- single config file path is sufficient
+- Standard WireGuard INI format: `[Interface]` + `[Peer]` sections
 
 ### D. Input Sources
 
-- `docs/data-model/2026-03-04-1712-data-model.md` -- §4.C (WireGuardKeyPair schema)
-- `docs/milestone/2026-03-04-1726-milestone.md` -- M3.1 acceptance criteria
+- Data model §4.C -- WireGuardConfig schema (6 fields)
+- ADR-0001 -- wireguard-go + wg-quick decision, sequence diagram
+- Milestone document M3.2 -- acceptance criteria
 
 ### E. Verified Facts
 
-| # | Tested | Result |
+| What was tested | Result | Decision |
 | --- | --- | --- |
-| 1 | `StaticSecret::random_from_rng(OsRng)` + `PublicKey::from(&secret)` | 32-byte key pair generated successfully |
-| 2 | `secret.zeroize()` on `StaticSecret` | Zeroes internal state -- OK |
-| 3 | `#[derive(Zeroize, ZeroizeOnDrop)]` on struct with `[u8; 32]` fields | Compiles and zeroes on drop |
-| 4 | `STANDARD.encode(public.as_bytes())` | 44-char base64 string (WireGuard standard) |
-| 5 | `[u8; 32].zeroize()` | All bytes set to 0 -- verified by assertion |
-| 6 | Both crates added to Cargo.toml, `cargo check` passes | No compilation errors |
+| `std::os::unix::fs::PermissionsExt::from_mode(0o600)` on `/tmp` | Permission correctly set to 600 | Use `fs::set_permissions` after `File::create` + write |
+| WireGuard INI format write + read back | Content matches expected format | Use `write!` macro with format string |
+| `fs::remove_file` + `Path::exists` check | File removed, exists returns false | Use for delete with existence verification |
+| `WireGuardKeyPair` API in keys.rs | `private_key_base64()` and `public_key_base64()` available | Config builder takes base64 strings directly |
+| `error.rs` structure | No `VpnError` enum exists yet | Must add `VpnError` + `From<VpnError> for AppError` |
 
 ### F. Unverified Assumptions
 
-None -- all technical elements verified via spike.
+None. All technical elements verified via spike.
 
 ---
 
@@ -61,62 +61,93 @@ None -- all technical elements verified via spike.
 
 ```mermaid
 classDiagram
-    class WireGuardKeyPair {
-        -private_key: [u8; 32]
-        -public_key: [u8; 32]
-        +generate() WireGuardKeyPair
-        +public_key_base64() String
-        +private_key_base64() String
+    class WireGuardConfig {
+        +String interface_private_key
+        +String interface_address
+        +String interface_dns
+        +String peer_public_key
+        +String peer_endpoint
+        +String peer_allowed_ips
+        +write() Result~(), VpnError~
+        +delete() Result~(), VpnError~
+        +to_ini() String
     }
-    note for WireGuardKeyPair "Derives: Zeroize, ZeroizeOnDrop\nDrop zeroes both key fields"
+
+    class VpnError {
+        <<enumeration>>
+        ConfigWriteFailed(String)
+        ConfigDeleteFailed(String)
+        ConfigPermissionFailed(String)
+    }
+
+    class WireGuardKeyPair {
+        +private_key_base64() String
+        +public_key_base64() String
+    }
+
+    WireGuardConfig ..> VpnError : returns
+    WireGuardConfig ..> WireGuardKeyPair : consumes base64 keys
+    VpnError ..|> AppError : From trait
 ```
 
 ### B. Decisions
 
-| Decision | Choice | Alternative Considered | Rationale |
-| --- | --- | --- | --- |
-| Key type | `StaticSecret` | `EphemeralSecret` | `EphemeralSecret` does not implement `Zeroize`; `StaticSecret` with `static_secrets` feature does (Principle 1: Explicit over Implicit) |
-| Struct design | Store raw `[u8; 32]` | Store `StaticSecret` directly | Raw bytes allow `Zeroize`/`ZeroizeOnDrop` derive on the struct; `StaticSecret` is consumed during construction (Principle 3: Single Responsibility) |
-| Module layout | `vpn_manager/mod.rs` + `keys.rs` | Single `vpn_manager.rs` | Directory structure accommodates M3.2 (`config.rs`) and M3.3 (`tunnel.rs`) (Principle 4: Composition) |
+1. **Flat struct, no builder** -- all 6 fields are required per data model. A builder adds complexity without value. (Principle: Explicit over Implicit)
+2. **`write()` and `delete()` as methods on `WireGuardConfig`** -- config owns the data and knows the file path. Keeps responsibility cohesive. (Principle: Single Responsibility)
+3. **Constant file path** -- `/tmp/oh-my-vpn-wg0.conf` as `const`. Data model specifies this path, and only one session is active at a time. (Principle: Explicit over Implicit)
+4. **`delete()` is idempotent** -- if file does not exist, return `Ok(())`. Prevents double-delete errors in cleanup paths. (Principle: Fail Fast -- but graceful for idempotent operations)
+5. **`VpnError` in `error.rs`** -- follows existing pattern (`ProviderError`, `KeychainError`). M3.3 will extend this enum with tunnel-related variants.
 
 ### C. Boundaries
 
-- `vpn_manager/keys.rs` -- key generation only, no config or tunnel logic
-- `vpn_manager/mod.rs` -- re-exports `keys` module, future `config` and `tunnel` modules
+| File | Responsibility |
+| --- | --- |
+| `config.rs` | `WireGuardConfig` struct, `write()`, `delete()`, `to_ini()`, unit tests |
+| `error.rs` | `VpnError` enum + `From<VpnError> for AppError` |
+| `vpn_manager/mod.rs` | `pub mod config` declaration |
 
 ---
 
 ## 3. Steps
 
-### Step 1: Restructure vpn_manager Module
+### Step 1: Add VpnError to error.rs
 
-- [x] **Status**: completed at 2026-03-05T01:23+07:00
-- **Scope**: `src-tauri/src/vpn_manager.rs` → `src-tauri/src/vpn_manager/mod.rs`
+- [x] **Status**: completed at 2026-03-05T11:40:00+07:00
+- **Scope**: `src-tauri/src/error.rs`
 - **Dependencies**: none
-- **Description**: Convert the single-file stub into a directory module. Move doc comment to `mod.rs`, add `pub mod keys;` declaration.
+- **Description**: Add `VpnError` enum with `ConfigWriteFailed(String)`, `ConfigDeleteFailed(String)`, `ConfigPermissionFailed(String)` variants. Implement `From<VpnError> for AppError` using existing error codes `TUNNEL_SETUP_FAILED` (for write/permission) and `TUNNEL_TEARDOWN_FAILED` (for delete). Add `use crate::error::VpnError;` will be needed in config.rs.
 - **Acceptance Criteria**:
-  - `src-tauri/src/vpn_manager/mod.rs` exists with module doc comment and `pub mod keys;`
-  - `src-tauri/src/vpn_manager.rs` removed (moved to directory structure)
-  - `cargo check` passes
+  - `VpnError` enum defined with 3 variants
+  - `From<VpnError> for AppError` maps to correct error codes
+  - Existing code compiles without changes (`cargo check`)
 
-### Step 2: Implement WireGuardKeyPair
+### Step 2: Implement WireGuardConfig in config.rs
 
-- [x] **Status**: completed at 2026-03-05T01:29+07:00
-- **Scope**: `src-tauri/src/vpn_manager/keys.rs`
+- [x] **Status**: completed at 2026-03-05T11:43:00+07:00
+- **Scope**: `src-tauri/src/vpn_manager/config.rs`
 - **Dependencies**: Step 1
-- **Description**: Implement the `WireGuardKeyPair` struct with `Zeroize`/`ZeroizeOnDrop` derive, `generate()` constructor, `public_key_base64()` and `private_key_base64()` methods, and unit tests.
+- **Description**: Create the `WireGuardConfig` struct with 6 fields matching data model §4.C. Implement `to_ini()` to generate standard WireGuard INI format, `write()` to create the file at `CONFIG_PATH` with permission 600, and `delete()` to remove the file idempotently. Include unit tests for: INI format correctness, permission 600 verification, delete + verify gone, and idempotent delete.
 - **Acceptance Criteria**:
-  - `WireGuardKeyPair` struct with `private_key: [u8; 32]`, `public_key: [u8; 32]`
-  - `#[derive(Zeroize, ZeroizeOnDrop)]` on the struct
-  - `generate()` uses `StaticSecret::random_from_rng(OsRng)` + `PublicKey::from(&secret)`
-  - `public_key_base64()` returns 44-char base64 string
-  - `private_key_base64()` returns 44-char base64 string
-  - Unit test: generate → verify key lengths (32 bytes each)
-  - Unit test: generate → verify base64 output is 44 chars
-  - Unit test: generate two pairs → verify public keys differ (randomness check)
-  - Unit test: verify `[u8; 32]` zeroize works (proxy for ZeroizeOnDrop)
+  - `WireGuardConfig` struct with 6 fields (all `String`)
+  - `const CONFIG_PATH: &str = "/tmp/oh-my-vpn-wg0.conf"`
+  - `to_ini()` returns valid WireGuard INI with `[Interface]` and `[Peer]` sections
+  - `write()` creates file, writes INI, sets permission `0o600`
+  - `delete()` removes file, returns `Ok(())` if already missing
+  - `DNS` field populated (FR-VC-5 leak prevention)
+  - `AllowedIPs` set to `0.0.0.0/0, ::/0` in config
+  - Unit test: write → verify permission 600 → read content → delete → verify gone
+  - Unit test: delete non-existent file → `Ok(())`
   - `cargo test` passes
-  - `cargo clippy` clean (no warnings on new code)
+
+### Step 3: Register config module in mod.rs
+
+- [x] **Status**: completed at 2026-03-05T11:43:00+07:00
+- **Scope**: `src-tauri/src/vpn_manager/mod.rs`
+- **Dependencies**: Step 2
+- **Description**: Add `pub mod config;` to `vpn_manager/mod.rs`.
+- **Acceptance Criteria**:
+  - `pub mod config;` added
+  - `cargo check` passes
 
 ---
 
@@ -124,16 +155,20 @@ classDiagram
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Trivial file restructure -- single mv + edit |
-| 2 | scout → worker | Simple implementation but needs to verify existing patterns in codebase |
+| 1 | Direct | Trivial -- add enum + From impl to existing file |
+| 2 | scout → worker | Main implementation. Scout reads keys.rs patterns + error.rs, worker implements config.rs with tests |
+| 3 | Direct | Single line addition |
 
-**Execution order**: Sequential (Step 1 → Step 2)
+**Execution order**: Sequential (1 → 2 → 3)
 
-**Estimated complexity**:
+**Parallel opportunities**: None -- Step 2 depends on Step 1, Step 3 depends on Step 2.
 
-| Step | Tier | Tokens |
+**Complexity estimates**:
+
+| Step | Tier | Estimated Tokens |
 | --- | --- | --- |
 | 1 | Trivial | < 5K |
 | 2 | Simple | 10--20K |
+| 3 | Trivial | < 5K |
 
-**Risk flags**: None -- all APIs verified, scope is contained to one new file.
+**Risk flags**: None. All APIs verified, patterns established.

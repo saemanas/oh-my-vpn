@@ -66,6 +66,46 @@ pub enum ProviderError {
     Other(anyhow::Error),
 }
 
+// ── VpnError ─────────────────────────────────────────────────────────────────
+
+/// Internal error type produced by VPN tunnel operations.
+///
+/// This enum is **not** serialized directly. It is converted into an
+/// `AppError` via `From<VpnError> for AppError` at the IPC boundary.
+#[derive(Debug)]
+pub enum VpnError {
+    /// Writing the WireGuard configuration file failed.
+    ConfigWriteFailed(String),
+    /// Deleting the WireGuard configuration file failed.
+    ConfigDeleteFailed(String),
+    /// Setting file permissions on the WireGuard config failed.
+    ConfigPermissionFailed(String),
+}
+
+// ── From<VpnError> for AppError ─────────────────────────────────────────────
+
+impl From<VpnError> for AppError {
+    fn from(error: VpnError) -> Self {
+        match error {
+            VpnError::ConfigWriteFailed(msg) => AppError::new(
+                codes::TUNNEL_SETUP_FAILED,
+                msg,
+                None,
+            ),
+            VpnError::ConfigDeleteFailed(msg) => AppError::new(
+                codes::TUNNEL_TEARDOWN_FAILED,
+                msg,
+                None,
+            ),
+            VpnError::ConfigPermissionFailed(msg) => AppError::new(
+                codes::TUNNEL_SETUP_FAILED,
+                msg,
+                None,
+            ),
+        }
+    }
+}
+
 // ── From<KeychainError> for AppError ────────────────────────────────────────
 
 impl From<KeychainError> for AppError {
