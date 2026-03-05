@@ -45,6 +45,12 @@ pub struct ActiveSession {
     pub created_at: String,
     pub hourly_cost: f64,
     pub ssh_key_id: Option<String>,
+    /// Server-side WireGuard public key (stored for reconnect on orphan recovery).
+    #[serde(default)]
+    pub server_wireguard_public_key: Option<String>,
+    /// Client-side WireGuard private key (stored for reconnect on orphan recovery).
+    #[serde(default)]
+    pub client_wireguard_private_key: Option<String>,
 }
 
 // -- SessionStatus
@@ -177,6 +183,8 @@ mod tests {
             created_at: Utc::now().to_rfc3339(),
             hourly_cost: 0.007,
             ssh_key_id: Some("key-456".to_string()),
+            server_wireguard_public_key: None,
+            client_wireguard_private_key: None,
         }
     }
 
@@ -238,6 +246,8 @@ mod tests {
             created_at: two_seconds_ago.to_rfc3339(),
             hourly_cost: 0.007,
             ssh_key_id: None,
+            server_wireguard_public_key: None,
+            client_wireguard_private_key: None,
         };
 
         tracker.create_session(&session).expect("create should succeed");

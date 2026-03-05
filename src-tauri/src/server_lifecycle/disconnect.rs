@@ -89,7 +89,7 @@ impl ServerLifecycle {
     /// 5. Destroy server (initial attempt; ignore immediate error)
     /// 6. Verify deletion via `get_server` -- retry up to 3 times (1s, 2s, 4s backoff)
     /// 7. Delete session file only if server destruction is confirmed
-    async fn destroy_and_cleanup(
+    pub(crate) async fn destroy_and_cleanup(
         &self,
         session: &ActiveSession,
         cloud_provider: &dyn CloudProvider,
@@ -195,6 +195,8 @@ mod tests {
             created_at: Utc::now().to_rfc3339(),
             hourly_cost: 0.007,
             ssh_key_id: None,
+            server_wireguard_public_key: None,
+            client_wireguard_private_key: None,
         }
     }
 

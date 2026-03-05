@@ -4,9 +4,11 @@
 //! WireGuard, establish tunnel, and destroy on disconnect.
 //! Implements the stepper flow (provision → configure → connect).
 
+pub mod cleanup;
 pub mod cloud_init;
 pub mod connect;
 pub mod disconnect;
+pub mod orphan;
 pub mod ssh_keys;
 
 use std::fmt;
@@ -45,6 +47,10 @@ pub enum LifecycleError {
     NoActiveSession,
     /// Server destruction failed persistently after all retry attempts.
     DestructionFailed(String),
+    /// Orphan detection failed (e.g., provider API unreachable during scan).
+    OrphanDetectionFailed(String),
+    /// Reconnecting to an orphaned server failed.
+    OrphanReconnectFailed(String),
 }
 
 impl fmt::Display for LifecycleError {
@@ -78,6 +84,12 @@ impl fmt::Display for LifecycleError {
             LifecycleError::NoActiveSession => write!(f, "No active session exists"),
             LifecycleError::DestructionFailed(msg) => {
                 write!(f, "Server destruction failed: {msg}")
+            }
+            LifecycleError::OrphanDetectionFailed(msg) => {
+                write!(f, "Orphan detection failed: {msg}")
+            }
+            LifecycleError::OrphanReconnectFailed(msg) => {
+                write!(f, "Orphan reconnect failed: {msg}")
             }
         }
     }

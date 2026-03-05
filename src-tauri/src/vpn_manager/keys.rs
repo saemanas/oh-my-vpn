@@ -27,6 +27,30 @@ impl WireGuardKeyPair {
         }
     }
 
+    /// Reconstruct a key pair from a base64-encoded private key.
+    ///
+    /// Derives the public key from the private key using Curve25519.
+    /// Used for orphan reconnect -- the original private key is stored in the
+    /// session file and reused to match the server's peer configuration.
+    ///
+    /// Returns `None` if the base64 string is invalid or not exactly 32 bytes.
+    pub fn from_private_key_base64(private_key_base64: &str) -> Option<Self> {
+        let bytes = STANDARD.decode(private_key_base64).ok()?;
+        if bytes.len() != 32 {
+            return None;
+        }
+        let mut private_key = [0u8; 32];
+        private_key.copy_from_slice(&bytes);
+
+        let secret = StaticSecret::from(private_key);
+        let public = PublicKey::from(&secret);
+
+        Some(Self {
+            private_key,
+            public_key: *public.as_bytes(),
+        })
+    }
+
     /// Returns the public key encoded as a standard Base64 string (44 characters).
     pub fn public_key_base64(&self) -> String {
         STANDARD.encode(self.public_key)
@@ -69,5 +93,35 @@ mod tests {
         let mut bytes: [u8; 32] = [0xAB; 32];
         bytes.zeroize();
         assert_eq!(bytes, [0u8; 32]);
+    }
+
+    #[test]
+    fn from_private_key_base64_round_trip() {
+        let original = WireGuardKeyPair::generate();
+        let private_b64 = original.private_key_base64();
+
+        let reconstructed = WireGuardKeyPair::from_private_key_base64(&private_b64)
+            .expect("should reconstruct from valid base64");
+
+        assert_eq!(
+            reconstructed.private_key, original.private_key,
+            "private keys should match"
+        );
+        assert_eq!(
+            reconstructed.public_key, original.public_key,
+            "public keys should match (derived from same private key)"
+        );
+    }
+
+    #[test]
+    fn from_private_key_base64_invalid_returns_none() {
+        assert!(WireGuardKeyPair::from_private_key_base64("not-valid-base64!!!").is_none());
+    }
+
+    #[test]
+    fn from_private_key_base64_wrong_length_returns_none() {
+        // Valid base64 but only 16 bytes (not 32).
+        let short = STANDARD.encode([0xABu8; 16]);
+        assert!(WireGuardKeyPair::from_private_key_base64(&short).is_none());
     }
 }

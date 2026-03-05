@@ -1,183 +1,173 @@
 ---
-task: "Server Lifecycle -- Disconnect Flow"
+task: "Auto-Cleanup + Orphan Detection"
 milestone: "M4"
-module: "M4.3"
-created_at: "2026-03-05T13:11:00+07:00"
-status: "completed"
-branch: "feat/disconnect-flow"
+module: "M4.4"
+created_at: "2026-03-05T13:48:00+07:00"
+status: "pending"
+branch: "feat/auto-cleanup-orphan-detection"
 ---
 
-> **Status**: Completed at 2026-03-05T13:42:00+07:00
-> **Branch**: feat/disconnect-flow
+> **Status**: Completed at 2026-03-05T14:12:00+07:00
+> **Branch**: feat/auto-cleanup-orphan-detection
 
-# PLAN -- M4.3: Server Lifecycle -- Disconnect Flow
+# PLAN.md -- M4.4: Auto-Cleanup + Orphan Detection
 
 ## 1. Context
 
 ### A. Problem Statement
 
-M4.2 (Connect Flow) is complete -- the app can provision servers and establish WireGuard tunnels. The disconnect flow is the complement: tear down the tunnel, destroy the server, verify deletion, and clear session state. Without this, users cannot cleanly end a VPN session and servers accumulate as orphans.
+When the app crashes, is force-quit, or loses network during server destruction, cloud instances are left running without a corresponding app session -- "orphaned servers." These incur ongoing cost and are a security risk (open WireGuard port). M4.4 implements two capabilities:
+
+1. **Auto-cleanup on connect failure** -- already partially handled by `ConnectCleanup` guard in `connect.rs` (Drop-based). M4.4 adds a standalone cleanup function for post-crash SSH key cleanup and reusable server resource teardown.
+2. **Orphan detection on app launch** -- read persisted `active-session.json`, query provider API to verify server existence, and surface orphaned servers to the caller. User can destroy or reconnect.
 
 ### B. Current State
 
-- `ServerLifecycle` struct owns `SessionTracker` and `PreferencesStore` in `server_lifecycle/mod.rs`
-- `connect()` is implemented in `server_lifecycle/connect.rs`
-- `tunnel::tunnel_down(&mut WireGuardKeyPair)` exists but requires a key pair reference -- key pair is not persisted after connect
-- `CloudProvider::destroy_server()` and `get_server()` exist on the trait
-- `LifecycleError` enum has connect-related variants but lacks disconnect-specific ones
-- `ProviderError::DestructionFailed` and error code `PROVIDER_DESTRUCTION_FAILED` already exist
-- `ActiveSession` contains `server_id`, `provider`, `region` -- sufficient to identify what to destroy
+- `SessionTracker` persists `ActiveSession` to `active-session.json` with fields: `server_id`, `provider`, `region`, `server_ip`, `created_at`, `hourly_cost`, `ssh_key_id`.
+- `ServerLifecycle::disconnect()` has `destroy_and_cleanup()` -- destroy server with retry + exponential backoff + verification via `get_server()`. This is reusable for orphan destroy.
+- `ConnectCleanup` in `connect.rs` handles Drop-based auto-cleanup during connect. Standalone cleanup for orphan resolution needs a different approach (async, not Drop).
+- `OrphanAction` enum (`Destroy`/`Reconnect`) already exists in `types.rs`.
+- `OrphanedServer` struct does NOT exist yet -- needs to be added to `types.rs`.
+- `LifecycleError` in `mod.rs` lacks orphan-specific variants.
 
 ### C. Constraints
 
-- `wg-quick down` operates by interface name (`oh-my-vpn-wg0`), not by key pair -- key pair is only needed for zeroize
-- Connect flow drops `WireGuardKeyPair` at function end -- no key material persists (correct security behavior)
-- Disconnect must work without stored key material
-- Session state must be preserved on persistent destruction failure (cross-cutting §8.C)
-- Retry up to 3 times with exponential backoff (cross-cutting §2.A)
+- Detection must be async -- must not block app launch (NFR-PERF-3: menu bar ready < 3s).
+- 100% detection rate for persisted sessions (NFR-REL-1).
+- Reconnect path: reuse original WireGuard keys stored in session, tunnel up to existing server (skip provisioning). New keys would fail because server's `wg0.conf` hardcodes the original client public key as peer.
+- IPC commands are out of scope (M4.5).
 
 ### D. Verified Facts
 
-1. **`tunnel_down` signature**: requires `&mut WireGuardKeyPair` -- confirmed in `vpn_manager/tunnel.rs:163`. The function runs `wg-quick down oh-my-vpn-wg0` via osascript and then calls `key_pair.zeroize()`. The wg-quick command itself does not use the key pair
-2. **`ActiveSession` fields**: `server_id`, `provider`, `region`, `server_ip`, `created_at`, `hourly_cost`, `ssh_key_id` -- confirmed in `session_tracker.rs:46-53`
-3. **`ProviderRegistry` access**: connect flow uses `&tokio::sync::Mutex<ProviderRegistry>` -- disconnect will follow the same pattern
-4. **Error codes**: `PROVIDER_DESTRUCTION_FAILED` exists in `error.rs:269`, `TUNNEL_TEARDOWN_FAILED` exists in `error.rs:273`, `NOT_FOUND_SESSION` exists in `error.rs:258`
-5. **`KeychainAdapter::retrieve_credential`**: returns `Result<Option<ProviderCredential>>` -- confirmed in connect.rs usage
+1. **`destroy_and_cleanup` is reusable** -- method on `ServerLifecycle`, accepts `&ActiveSession`, `&dyn CloudProvider`, `&str` (api_key). Can be called from orphan destroy path without modification.
+2. **`ActiveSession.ssh_key_id` is `Option<String>`** -- populated during connect flow between SSH key registration and deletion. If app crashes after SSH key registration but before deletion, this field holds the provider-side SSH key ID.
+3. **`tunnel::tunnel_up` signature** -- takes `&WireGuardKeyPair`, `server_ip`, `server_public_key`, `interface_address`, `dns`. Reconnect path needs both the server's WG public key and the original client WG key pair.
+4. **Reconnect requires original keys** -- The server's `wg0.conf` (written by cloud-init) hardcodes the original client public key as `[Peer] PublicKey`. Generating new WG keys would cause handshake failure because the server doesn't know the new client. Solution: store `server_wireguard_public_key` AND `client_wireguard_private_key` in `ActiveSession`, reuse the same keys on reconnect. This is acceptable because: (a) keys are per-session and deleted on destroy, (b) the session file is already in the app data directory, (c) NFR-SEC-2 "ephemeral per session" is maintained -- keys exist only during session lifetime.
 
 ### E. Unverified Assumptions
 
-None -- all technical assumptions verified via code inspection.
+1. **Cloud-init WireGuard config is stable across server restarts** -- if the provider reboots the orphaned server, cloud-init may not re-run, but `/etc/wireguard/wg0.conf` persists on disk. The WireGuard systemd service (`wg-quick@wg0`) is enabled, so it auto-starts on reboot. Risk: low. Fallback: reconnect fails, user destroys instead.
 
 ## 2. Architecture
 
 ### A. Diagram
 
 ```mermaid
-sequenceDiagram
-    participant SL as ServerLifecycle
-    participant VM as tunnel (VPN Manager)
-    participant KA as KeychainAdapter
-    participant PR as ProviderRegistry
-    participant CP as CloudProvider
-    participant ST as SessionTracker
-
-    SL->>ST: read_session()
-    ST-->>SL: ActiveSession (or error if none)
-
-    SL->>VM: tunnel_down_interface()
-    VM->>VM: osascript wg-quick down
-    VM-->>SL: Ok / TunnelDownFailed
-
-    SL->>KA: retrieve_credential(provider)
-    KA-->>SL: api_key
-
-    SL->>PR: get(provider)
-    PR-->>SL: &dyn CloudProvider
-
-    SL->>CP: destroy_server(api_key, server_id)
-    CP-->>SL: Ok
-
-    SL->>CP: get_server(api_key, server_id)
-
-    alt Verified deleted
-        CP-->>SL: None
-        SL->>ST: delete_session()
-        SL-->>SL: Ok(())
-    else Still exists -- retry loop (max 3)
-        CP-->>SL: Some(ServerInfo)
-        SL->>SL: exponential backoff (1s, 2s, 4s)
-        SL->>CP: destroy_server + get_server
-        alt Eventually deleted
-            SL->>ST: delete_session()
-        else Persistent failure
-            SL-->>SL: Err(DestructionFailed) with console URL
-        end
+flowchart TD
+    subgraph server_lifecycle["server_lifecycle/"]
+        MOD[mod.rs]
+        CL[cleanup.rs]
+        OR[orphan.rs]
+        CO[connect.rs]
+        DC[disconnect.rs]
     end
+
+    subgraph deps["dependencies"]
+        ST[SessionTracker]
+        PR[ProviderRegistry]
+        KA[KeychainAdapter]
+        TN[tunnel]
+        WG[WireGuardKeyPair]
+    end
+
+    CL -->|cleanup_ssh_key| PR
+    OR -->|check_orphaned_servers| ST
+    OR -->|check_orphaned_servers| PR
+    OR -->|check_orphaned_servers| KA
+    OR -->|resolve_destroy| DC
+    OR -->|resolve_reconnect<br/>reuse stored keys| TN
+    CO -->|ActiveSession with<br/>server wg pubkey +<br/>client wg privkey| ST
 ```
 
 ### B. Decisions
 
-| Decision | Rationale | Principle |
-| --- | --- | --- |
-| Add `tunnel_down_interface()` without key pair param | wg-quick operates by interface name; key pair is already zeroed after connect | Explicit over Implicit |
-| Keep existing `tunnel_down(&mut WireGuardKeyPair)` | Used by connect cleanup where key pair is still in scope | Composition over Inheritance |
-| Add `Provider::console_url()` to types.rs | Reusable by M4.4 orphan detection; single source of truth for console URLs | Single Responsibility |
-| Preserve session on persistent failure | User can retry or manually delete; prevents data loss | Fail Fast (surface error clearly) |
-| Add `NoActiveSession` + `DestructionFailed` to LifecycleError | Distinct error semantics for disconnect vs connect failures | Explicit over Implicit |
+1. **Store WG keys in `ActiveSession`** -- add `server_wireguard_public_key: Option<String>` and `client_wireguard_private_key: Option<String>`. Stored at connect time (Step 11), cleared on disconnect. Enables reconnect with original keys -- server's `wg0.conf` already has the matching client public key as peer. Minimal schema change, no migration needed (fields are `Option` with `#[serde(default)]`).
+2. **Reuse `destroy_and_cleanup`** for orphan destroy -- no code duplication. The method already handles retry + exponential backoff + verification + session deletion (Principle: Composition over Inheritance).
+3. **`cleanup.rs` as thin utility** -- provides `cleanup_ssh_key` for post-crash SSH key cleanup that orphan detection discovers. The server cleanup reuses disconnect's `destroy_and_cleanup`.
+4. **`orphan.rs` methods on `ServerLifecycle`** -- consistent with `connect` and `disconnect` being `impl ServerLifecycle` methods.
 
 ### C. Boundaries
 
 | File | Responsibility |
 | --- | --- |
-| `types.rs` | `Provider::console_url()` method |
-| `vpn_manager/tunnel.rs` | `tunnel_down_interface()` -- teardown without key pair |
-| `server_lifecycle/mod.rs` | `pub mod disconnect;`, new error variants, From impls |
-| `server_lifecycle/disconnect.rs` | `ServerLifecycle::disconnect()` implementation + tests |
+| `cleanup.rs` | Standalone SSH key cleanup (for keys left by crashed connect) |
+| `orphan.rs` | `check_orphaned_servers` + `resolve_orphaned_server` logic |
+| `mod.rs` | New error variants, module declarations |
+| `types.rs` | `OrphanedServer` struct |
+| `error.rs` | Error conversion for new `LifecycleError` variants |
+| `connect.rs` | Store `server_wireguard_public_key` + `client_wireguard_private_key` in `ActiveSession` |
+| `session_tracker.rs` | Add `server_wireguard_public_key` + `client_wireguard_private_key` fields to `ActiveSession` |
 
 ## 3. Steps
 
-### Step 1: Add utility functions
+### Step 1: Foundation Types and Error Handling
 
-- [x] **Status**: completed at 2026-03-05T13:22:00+07:00
-- **Scope**: `src-tauri/src/types.rs`, `src-tauri/src/vpn_manager/tunnel.rs`
+- [x] **Status**: completed at 2026-03-05T14:02:00+07:00
+- **Scope**: `src-tauri/src/types.rs`, `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/error.rs`, `src-tauri/src/session_tracker.rs`, `src-tauri/src/server_lifecycle/connect.rs`
 - **Dependencies**: none
-- **Description**: Add `Provider::console_url()` method returning the provider's cloud console URL for manual server management. Add `tunnel_down_interface()` function that tears down the WireGuard tunnel without requiring a key pair reference.
+- **Description**: Add `OrphanedServer` struct to types.rs. Add `server_wireguard_public_key: Option<String>` to `ActiveSession` in session_tracker.rs. Update connect.rs to store the server WG public key in the session. Add orphan-specific `LifecycleError` variants to mod.rs. Add corresponding `From<LifecycleError> for AppError` branches in error.rs.
 - **Acceptance Criteria**:
-  - `Provider::console_url()` returns correct URLs: Hetzner (`https://console.hetzner.cloud`), AWS (`https://console.aws.amazon.com/ec2`), GCP (`https://console.cloud.google.com/compute`)
-  - `tunnel_down_interface()` runs `wg-quick down oh-my-vpn-wg0` via osascript without key pair parameter
-  - `tunnel_down_interface()` returns `Result<(), VpnError>` with `VpnError::TunnelDownFailed` on failure
-  - Unit tests for `console_url()` (all 3 providers)
-  - Unit test for `tunnel_down_interface` script builder (pure, no I/O)
+  - `OrphanedServer` struct with fields: `server_id`, `provider`, `region`, `created_at`, `estimated_cost` (matching API design §4.C)
+  - `ActiveSession` has `server_wireguard_public_key: Option<String>` and `client_wireguard_private_key: Option<String>` fields (both `#[serde(default)]`)
+  - `connect()` stores server WG public key and client WG private key in session
+  - `LifecycleError::OrphanDetectionFailed(String)` variant added
+  - `LifecycleError::OrphanReconnectFailed(String)` variant added
+  - Error conversions map to appropriate AppError codes
+  - `cargo check` passes
 
-### Step 2: Implement disconnect flow
+### Step 2: Cleanup Utility and Orphan Detection Logic
 
-- [x] **Status**: completed at 2026-03-05T13:30:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/server_lifecycle/disconnect.rs`
+- [x] **Status**: completed at 2026-03-05T14:08:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/cleanup.rs`, `src-tauri/src/server_lifecycle/orphan.rs`, `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/server_lifecycle/disconnect.rs`, `src-tauri/src/vpn_manager/keys.rs`
 - **Dependencies**: Step 1
-- **Description**: Add `NoActiveSession` and `DestructionFailed(String)` variants to `LifecycleError` with Display and From<LifecycleError> for AppError mappings. Add `pub mod disconnect;` to mod.rs. Implement `ServerLifecycle::disconnect()` method with the full flow: read session → tunnel down → retrieve API key → destroy server → verify deletion → retry up to 3 times with exponential backoff → delete session on success or return error with console URL on persistent failure.
+- **Description**: Create `cleanup.rs` with `cleanup_ssh_key` function. Create `orphan.rs` with `check_orphaned_servers` and `resolve_orphaned_server` methods on `ServerLifecycle`. Add `pub mod cleanup; pub mod orphan;` to mod.rs. Made `destroy_and_cleanup` `pub(crate)` for reuse from orphan.rs. Added `WireGuardKeyPair::from_private_key_base64` for reconnect key reconstruction.
 - **Acceptance Criteria**:
-  - `disconnect()` returns `Err(NoActiveSession)` when no session file exists
-  - Tunnel teardown via `tunnel_down_interface()` -- continues to destroy even if tunnel teardown fails (tunnel may already be down)
-  - Destruction verified via `get_server()` returning `None`
-  - Retry loop: up to 3 retries with exponential backoff (1s, 2s, 4s) using `tokio::time::sleep`
-  - On persistent failure: session preserved, error details include `console_url` via `serde_json::json!`
-  - On success: `session_tracker.delete_session()` called
-  - `NoActiveSession` maps to `NOT_FOUND_SESSION` AppError code
-  - `DestructionFailed` maps to `PROVIDER_DESTRUCTION_FAILED` AppError code
+  - `cleanup_ssh_key(provider, api_key, ssh_key_id)` -- deletes SSH key from provider (best-effort, logs error)
+  - `ServerLifecycle::check_orphaned_servers(registry)` -- reads session file, queries provider API, returns `Vec<OrphanedServer>` or empty vec. Clears stale state if server already gone
+  - `ServerLifecycle::resolve_orphaned_server(server_id, action, registry)` -- dispatches to destroy or reconnect path
+  - Destroy path: tunnel down (best-effort) → destroy server with verification → delete session → cleanup SSH key if present
+  - Reconnect path: verify server exists → reconstruct original WireGuard key pair from stored keys → tunnel up → update session timestamp
+  - `cargo check` passes
 
-### Step 3: Add unit tests for disconnect
+### Step 3: Unit Tests and Verification
 
-- [x] **Status**: completed at 2026-03-05T13:40:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/disconnect.rs` (tests module)
+- [x] **Status**: completed at 2026-03-05T14:12:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/orphan.rs` (test module), `src-tauri/src/server_lifecycle/cleanup.rs` (test module), `src-tauri/src/vpn_manager/keys.rs` (test module)
 - **Dependencies**: Step 2
-- **Description**: Add unit tests using mock CloudProvider (reuse pattern from connect.rs tests). Test: no session returns error, successful disconnect flow, retry on transient failure, persistent failure preserves session, tunnel teardown failure continues to destroy server.
+- **Description**: Add comprehensive unit tests using mock providers. Verify all paths: no orphans, stale state cleanup, orphan found, destroy success, destroy failure, reconnect success. Added WireGuardKeyPair::from_private_key_base64 round-trip tests.
 - **Acceptance Criteria**:
-  - Test: `disconnect_no_session_returns_error` -- empty session tracker → `NoActiveSession`
-  - Test: `disconnect_success_deletes_session` -- mock provider returns None on get_server → session deleted
-  - Test: `disconnect_retries_on_verify_failure` -- mock get_server returns Some first, None on retry → success
-  - Test: `disconnect_persistent_failure_preserves_session` -- mock get_server always returns Some → error returned, session file still exists
-  - Test: `disconnect_continues_after_tunnel_failure` -- tunnel teardown fails but server destruction succeeds
-  - All tests pass with `cargo test`
+  - Test: no session file → returns empty vec
+  - Test: session exists but server gone → clears stale state, returns empty vec
+  - Test: session exists and server alive → returns `OrphanedServer` with correct fields
+  - Test: resolve destroy → calls `destroy_and_cleanup`, deletes session
+  - Test: resolve destroy with SSH key → also cleans up SSH key
+  - Test: resolve reconnect → reconstructs original WG keys from session, calls tunnel_up equivalent, returns `SessionStatus`
+  - `cargo test` passes (unit tests, no integration)
+  - `cargo clippy` clean
 
 ## 4. Execution Strategy
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | scout → worker | 2 independent utility additions, low risk, clear specs |
-| 2 | scout → worker → reviewer | Core business logic with retry/backoff, error handling, session preservation -- needs review |
-| 3 | scout → worker | Test additions following established MockProvider pattern from connect.rs |
+| 1 | Direct | Type additions across 5 files -- Operator has full context from planning, no scouting needed |
+| 2 | Direct | Core logic in 2 new files + 1 mod.rs line -- builds directly on Step 1 context |
+| 3 | Direct | Tests follow established MockProvider pattern from connect.rs/disconnect.rs |
+
+**Single-file constraint note**: `mod.rs` is touched by all 3 steps (Step 1: error variants, Step 2: pub mod lines). Resolution: **Sequential Direct** -- each step adds distinct, non-overlapping content.
 
 **Execution order**: Step 1 → Step 2 → Step 3 (strictly sequential)
 
 **Estimated complexity**:
 
-- Step 1: Simple (~15K tokens)
-- Step 2: Medium (~40K tokens)
-- Step 3: Medium (~30K tokens)
+| Step | Tier | Rationale |
+| --- | --- | --- |
+| 1 | Simple | Struct/enum additions, field additions, pattern-matching branches |
+| 2 | Medium | Two new files with async logic, reuses existing patterns |
+| 3 | Medium | Multiple test cases with mock providers, follows existing test patterns |
 
 **Risk flags**:
 
-- Step 2: `disconnect()` shares `ServerLifecycle` impl block with `connect()` across files -- Rust allows this natively (`impl` blocks can span files), verified in existing connect.rs pattern
-- Step 3: Tests cannot call `disconnect()` directly without Keychain mock -- test the retry/destroy logic via mock provider at the component level, same pattern as connect.rs cleanup tests
+- Step 1: `ActiveSession` field additions (`server_wireguard_public_key`, `client_wireguard_private_key`) change serialization -- existing session files without these fields must still parse (serde `Option` with `#[serde(default)]` handles this). Client WG private key is stored on disk -- acceptable because session file is in app data directory and deleted on destroy
+- Step 2: Reconnect path depends on server's WireGuard config and systemd service surviving after crash/reboot. If server was terminated by provider or WG config was lost, reconnect will fail (acceptable -- user falls back to destroy)
 
 ---

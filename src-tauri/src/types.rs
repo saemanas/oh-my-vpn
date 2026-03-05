@@ -104,6 +104,26 @@ pub struct ProviderInfo {
     pub account_label: String,
 }
 
+/// An orphaned server detected on app launch.
+///
+/// Represents a cloud instance that was left running without a corresponding
+/// app session -- e.g., after a crash or force-quit. Surfaced to the caller
+/// so they can choose to destroy or reconnect.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrphanedServer {
+    /// Provider-side server ID.
+    pub server_id: String,
+    /// Which cloud provider owns this server.
+    pub provider: Provider,
+    /// Cloud region code (e.g., "fsn1", "us-east-1").
+    pub region: String,
+    /// ISO 8601 datetime when the server was originally created.
+    pub created_at: String,
+    /// Accumulated cost since `created_at` (USD).
+    pub estimated_cost: f64,
+}
+
 /// Action to take on an orphaned server.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
