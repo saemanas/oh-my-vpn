@@ -53,7 +53,7 @@ sequenceDiagram
     participant OS as macOS (sudo)
     participant WG as wg-quick
 
-    SL->>VM: Tunnel up (server IP, server public key)
+    SL->>VM: tunnel_up(server_ip, server_public_key, interface_address, dns)
     VM->>VM: Generate ephemeral WireGuard key pair
     VM->>VM: Write WireGuard config (permission 600)
     VM->>OS: Execute wg-quick up (via osascript sudo)
@@ -72,11 +72,11 @@ sequenceDiagram
         Note over SL: Server Lifecycle triggers<br/>auto-cleanup (FR-SL-4)
     end
 
-    SL->>VM: Tunnel down
+    SL->>VM: tunnel_down(key_pair)
     VM->>OS: Execute wg-quick down (via osascript sudo)
     OS->>WG: Tear down tunnel
     WG-->>VM: Exit code 0
-    VM->>VM: Delete ephemeral keys
+    VM->>VM: Zeroize key pair
     VM-->>SL: Tunnel torn down
 ```
 

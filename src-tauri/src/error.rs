@@ -80,6 +80,12 @@ pub enum VpnError {
     ConfigDeleteFailed(String),
     /// Setting file permissions on the WireGuard config failed.
     ConfigPermissionFailed(String),
+    /// `wg-quick up` exited with a non-zero status; carries captured stderr.
+    TunnelUpFailed(String),
+    /// `wg-quick down` exited with a non-zero status; carries captured stderr.
+    TunnelDownFailed(String),
+    /// A required sidecar binary was not found at the expected path.
+    SidecarNotFound(String),
 }
 
 // ── From<VpnError> for AppError ─────────────────────────────────────────────
@@ -98,6 +104,21 @@ impl From<VpnError> for AppError {
                 None,
             ),
             VpnError::ConfigPermissionFailed(msg) => AppError::new(
+                codes::TUNNEL_SETUP_FAILED,
+                msg,
+                None,
+            ),
+            VpnError::TunnelUpFailed(msg) => AppError::new(
+                codes::TUNNEL_SETUP_FAILED,
+                msg,
+                None,
+            ),
+            VpnError::TunnelDownFailed(msg) => AppError::new(
+                codes::TUNNEL_TEARDOWN_FAILED,
+                msg,
+                None,
+            ),
+            VpnError::SidecarNotFound(msg) => AppError::new(
                 codes::TUNNEL_SETUP_FAILED,
                 msg,
                 None,
