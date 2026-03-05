@@ -1,176 +1,228 @@
 ---
-task: "WireGuard Config File Management"
+task: "wg-quick Subprocess + Sidecar Bundling"
 milestone: "M3"
-module: "M3.2"
-created_at: "2026-03-05T11:30:00+07:00"
+module: "M3.3"
+created_at: "2026-03-05T12:05:00+07:00"
 status: "completed"
-branch: "feat/wireguard-config"
+branch: "feat/vpn-tunnel-sidecar"
 ---
 
-# WireGuard Config File Management
+> **Status**: Completed at 2026-03-05T12:12:00+07:00
+> **Branch**: feat/vpn-tunnel-sidecar
 
-> **Status**: Completed at 2026-03-05T11:43:00+07:00
-> **Branch**: feat/wireguard-config
+# PLAN -- M3.3: wg-quick Subprocess + Sidecar Bundling
 
 ## 1. Context
 
 ### A. Problem Statement
 
-M3.2 implements WireGuard configuration file lifecycle -- write INI config with permission 600, populate DNS for leak prevention, and delete after use. This bridges M3.1 (key generation) and M3.3 (wg-quick subprocess execution).
+The VPN Manager needs to establish and tear down WireGuard tunnels by executing `wg-quick` as a subprocess with root privileges. The `wireguard-go`, `wg`, and `wg-quick` binaries must be bundled inside the Tauri app so users do not need to install WireGuard separately. ADR-0001 chose this approach; ADR-0003 confirmed no Network Extension is needed.
 
 ### B. Current State
 
-- `src-tauri/src/vpn_manager/mod.rs` -- exists, exports `pub mod keys` only
-- `src-tauri/src/vpn_manager/keys.rs` -- M3.1 complete. `WireGuardKeyPair` with `private_key_base64()` / `public_key_base64()` methods
-- `src-tauri/src/error.rs` -- has `AppError`, `ProviderError`, `KeychainError`, `PreferencesError`. No `VpnError` yet
-- No `config.rs` exists yet
+M3.1 (keys.rs) and M3.2 (config.rs) are complete:
+
+- `WireGuardKeyPair` -- generate Curve25519 key pairs with zeroize
+- `WireGuardConfig` -- write INI config to `/tmp/oh-my-vpn-wg0.conf` with permission 600, delete after use
+
+The `vpn_manager/mod.rs` exposes `pub mod config; pub mod keys;` -- `tunnel` module does not exist yet.
+
+`VpnError` in `error.rs` has config-related variants only (`ConfigWriteFailed`, `ConfigDeleteFailed`, `ConfigPermissionFailed`). Tunnel execution variants are missing.
+
+No sidecar binaries or `bundle.externalBin` config exists in the project.
 
 ### C. Constraints
 
-- Config file path: `/tmp/oh-my-vpn-wg0.conf` (data model §4.C)
-- Permission must be `0o600` immediately after write (NFR-SEC-6)
-- File deleted regardless of wg-quick success/failure (ADR-0001)
-- Only one active session at a time -- single config file path is sufficient
-- Standard WireGuard INI format: `[Interface]` + `[Peer]` sections
+- macOS only (aarch64-apple-darwin target)
+- sudo required for wg-quick (utun device creation) -- via `osascript` authorization dialog
+- wg-quick is a bash script (#!/usr/bin/env bash) -- needs `wg` and `wireguard-go` on PATH or via env var
+- Config file must be deleted in both success and failure paths (NFR-SEC-6)
+- No `tauri-plugin-shell` needed -- Rust backend uses `std::process::Command` directly
 
 ### D. Input Sources
 
-- Data model §4.C -- WireGuardConfig schema (6 fields)
-- ADR-0001 -- wireguard-go + wg-quick decision, sequence diagram
-- Milestone document M3.2 -- acceptance criteria
+- ADR-0001: wireguard-go + wg-quick decision
+- ADR-0003: no Network Extension for MVP
+- Cross-cutting concepts §10: system permissions, sudo via osascript
+- Milestone M3.3 acceptance criteria
 
 ### E. Verified Facts
 
-| What was tested | Result | Decision |
-| --- | --- | --- |
-| `std::os::unix::fs::PermissionsExt::from_mode(0o600)` on `/tmp` | Permission correctly set to 600 | Use `fs::set_permissions` after `File::create` + write |
-| WireGuard INI format write + read back | Content matches expected format | Use `write!` macro with format string |
-| `fs::remove_file` + `Path::exists` check | File removed, exists returns false | Use for delete with existence verification |
-| `WireGuardKeyPair` API in keys.rs | `private_key_base64()` and `public_key_base64()` available | Config builder takes base64 strings directly |
-| `error.rs` structure | No `VpnError` enum exists yet | Must add `VpnError` + `From<VpnError> for AppError` |
+| # | What was tested | Result | Decision |
+| --- | --- | --- | --- |
+| 1 | `osascript` sudo pattern | `do shell script "echo hello" with administrator privileges` returned `hello_from_sudo` | Use osascript for privilege escalation |
+| 2 | `wg-quick` invocation via osascript | Ran successfully, printed usage text | osascript can invoke wg-quick with admin privileges |
+| 3 | `WG_QUICK_USERSPACE_IMPLEMENTATION` env var | wg-quick line 127: `cmd "${WG_QUICK_USERSPACE_IMPLEMENTATION:-wireguard-go}" utun` | Set this env var to sidecar path for wireguard-go discovery |
+| 4 | `wg` discovery | wg-quick calls `wg` via PATH (`wg show`, `wg addconf`, etc.) | Set PATH to include sidecar directory |
+| 5 | macOS `/bin/bash` 3.2 compatibility | `extglob` and `pipefail` work on bash 3.2 | wg-quick compatible with macOS default bash |
+| 6 | System tools availability | `networksetup` at `/usr/sbin/`, `route` at `/sbin/`, `ifconfig` at `/sbin/` | All wg-quick dependencies present on macOS |
+| 7 | Binary sizes | wireguard-go 3.0MB, wg 103KB, wg-quick 16KB | Total ~3.1MB sidecar overhead acceptable |
+| 8 | Target triple | `aarch64-apple-darwin` | Sidecar naming: `{name}-aarch64-apple-darwin` |
 
 ### F. Unverified Assumptions
 
-None. All technical elements verified via spike.
-
----
+| # | Assumption | Why not verified | Risk | Fallback |
+| --- | --- | --- | --- | --- |
+| 1 | Tauri `bundle.externalBin` bundles bash scripts (wg-quick) correctly | Cannot verify without full build + inspect .app bundle | Low -- Tauri copies files as-is, no compilation | Use `bundle.resources` instead and resolve path via `resource_dir()` |
 
 ## 2. Architecture
 
 ### A. Diagram
 
 ```mermaid
-classDiagram
-    class WireGuardConfig {
-        +String interface_private_key
-        +String interface_address
-        +String interface_dns
-        +String peer_public_key
-        +String peer_endpoint
-        +String peer_allowed_ips
-        +write() Result~(), VpnError~
-        +delete() Result~(), VpnError~
-        +to_ini() String
-    }
+sequenceDiagram
+    participant Caller as Server Lifecycle (M4)
+    participant TM as tunnel.rs
+    participant CF as config.rs
+    participant OS as osascript (sudo)
+    participant WQ as wg-quick (sidecar)
 
-    class VpnError {
-        <<enumeration>>
-        ConfigWriteFailed(String)
-        ConfigDeleteFailed(String)
-        ConfigPermissionFailed(String)
-    }
+    Caller->>TM: tunnel_up(params)
+    TM->>CF: WireGuardConfig::write()
+    CF-->>TM: Ok (config at /tmp)
 
-    class WireGuardKeyPair {
-        +private_key_base64() String
-        +public_key_base64() String
-    }
+    TM->>OS: osascript "do shell script ... with admin privileges"
+    OS->>WQ: wg-quick up /tmp/oh-my-vpn-wg0.conf
+    Note over WQ: WG_QUICK_USERSPACE_IMPLEMENTATION=sidecar/wireguard-go<br/>PATH includes sidecar/wg
 
-    WireGuardConfig ..> VpnError : returns
-    WireGuardConfig ..> WireGuardKeyPair : consumes base64 keys
-    VpnError ..|> AppError : From trait
+    alt success
+        WQ-->>OS: exit 0
+        OS-->>TM: stdout
+        TM->>CF: WireGuardConfig::delete()
+        TM-->>Caller: Ok(())
+    else failure
+        WQ-->>OS: exit non-zero + stderr
+        OS-->>TM: error text
+        TM->>CF: WireGuardConfig::delete()
+        TM-->>Caller: Err(VpnError::TunnelUpFailed)
+    end
+
+    Caller->>TM: tunnel_down(key_pair)
+    TM->>OS: osascript "wg-quick down oh-my-vpn-wg0"
+    OS->>WQ: wg-quick down oh-my-vpn-wg0
+    WQ-->>OS: exit 0
+    OS-->>TM: ok
+    TM->>TM: key_pair.zeroize()
+    TM-->>Caller: Ok(())
 ```
 
 ### B. Decisions
 
-1. **Flat struct, no builder** -- all 6 fields are required per data model. A builder adds complexity without value. (Principle: Explicit over Implicit)
-2. **`write()` and `delete()` as methods on `WireGuardConfig`** -- config owns the data and knows the file path. Keeps responsibility cohesive. (Principle: Single Responsibility)
-3. **Constant file path** -- `/tmp/oh-my-vpn-wg0.conf` as `const`. Data model specifies this path, and only one session is active at a time. (Principle: Explicit over Implicit)
-4. **`delete()` is idempotent** -- if file does not exist, return `Ok(())`. Prevents double-delete errors in cleanup paths. (Principle: Fail Fast -- but graceful for idempotent operations)
-5. **`VpnError` in `error.rs`** -- follows existing pattern (`ProviderError`, `KeychainError`). M3.3 will extend this enum with tunnel-related variants.
+| Decision | Alternatives considered | Rationale | Principle |
+| --- | --- | --- | --- |
+| `std::process::Command` for subprocess | `tauri-plugin-shell` | All execution is Rust-side, no JS bridge needed. Avoids adding a plugin dependency | Explicit over Implicit |
+| `tunnel_up` takes 4 params (server_ip, server_public_key, interface_address, dns) | 2 params per upstream sequence diagram | `WireGuardConfig` struct requires address and DNS fields. Upstream diagrams simplified the signature for readability. M4 (Server Lifecycle) must call with all 4 params | Explicit over Implicit |
+| osascript for sudo | Direct `sudo` CLI, Network Extension | ADR-0001/0003 mandate. macOS authorization dialog is UX-friendly | Reversibility |
+| Config delete in finally pattern | Delete only on success | NFR-SEC-6 requires deletion regardless of outcome. Private key must not persist on disk | Fail Fast |
+| Bundle 3 sidecars (wireguard-go, wg, wg-quick) | Bundle only wireguard-go, expect system wg | wg-quick depends on both `wg` and `wireguard-go`. Users should not need to install WireGuard separately | Explicit over Implicit |
+| `bundle.externalBin` for sidecar | `bundle.resources` | Tauri standard sidecar mechanism, places binaries in Contents/MacOS/ alongside main binary | Composition over Inheritance |
 
 ### C. Boundaries
 
 | File | Responsibility |
 | --- | --- |
-| `config.rs` | `WireGuardConfig` struct, `write()`, `delete()`, `to_ini()`, unit tests |
-| `error.rs` | `VpnError` enum + `From<VpnError> for AppError` |
-| `vpn_manager/mod.rs` | `pub mod config` declaration |
-
----
+| `src-tauri/src/vpn_manager/tunnel.rs` | Public API: `tunnel_up()`, `tunnel_down()`. Sidecar path resolution. osascript command construction and execution. Config delete guarantee |
+| `src-tauri/src/vpn_manager/config.rs` | Unchanged -- config write/delete/to_ini |
+| `src-tauri/src/vpn_manager/keys.rs` | Unchanged -- key generation/zeroize |
+| `src-tauri/src/vpn_manager/mod.rs` | Add `pub mod tunnel;` |
+| `src-tauri/src/error.rs` | Add `TunnelUpFailed`, `TunnelDownFailed`, `SidecarNotFound` to VpnError + AppError conversion |
+| `src-tauri/binaries/` | 3 sidecar files with target triple suffix |
+| `src-tauri/tauri.conf.json` | `bundle.externalBin` array |
 
 ## 3. Steps
 
-### Step 1: Add VpnError to error.rs
+### Step 1: Sidecar Binary Setup
 
-- [x] **Status**: completed at 2026-03-05T11:40:00+07:00
-- **Scope**: `src-tauri/src/error.rs`
+- [x] **Status**: completed at 2026-03-05T12:03:00+07:00
+- **Scope**: `src-tauri/binaries/` (3 files), `src-tauri/tauri.conf.json`
 - **Dependencies**: none
-- **Description**: Add `VpnError` enum with `ConfigWriteFailed(String)`, `ConfigDeleteFailed(String)`, `ConfigPermissionFailed(String)` variants. Implement `From<VpnError> for AppError` using existing error codes `TUNNEL_SETUP_FAILED` (for write/permission) and `TUNNEL_TEARDOWN_FAILED` (for delete). Add `use crate::error::VpnError;` will be needed in config.rs.
+- **Description**: Copy wireguard-go, wg, and wg-quick from Homebrew into `src-tauri/binaries/` with Tauri sidecar naming convention (`{name}-aarch64-apple-darwin`). Add `bundle.externalBin` to `tauri.conf.json`. Verify `cargo tauri dev` still compiles.
 - **Acceptance Criteria**:
-  - `VpnError` enum defined with 3 variants
-  - `From<VpnError> for AppError` maps to correct error codes
-  - Existing code compiles without changes (`cargo check`)
-
-### Step 2: Implement WireGuardConfig in config.rs
-
-- [x] **Status**: completed at 2026-03-05T11:43:00+07:00
-- **Scope**: `src-tauri/src/vpn_manager/config.rs`
-- **Dependencies**: Step 1
-- **Description**: Create the `WireGuardConfig` struct with 6 fields matching data model §4.C. Implement `to_ini()` to generate standard WireGuard INI format, `write()` to create the file at `CONFIG_PATH` with permission 600, and `delete()` to remove the file idempotently. Include unit tests for: INI format correctness, permission 600 verification, delete + verify gone, and idempotent delete.
-- **Acceptance Criteria**:
-  - `WireGuardConfig` struct with 6 fields (all `String`)
-  - `const CONFIG_PATH: &str = "/tmp/oh-my-vpn-wg0.conf"`
-  - `to_ini()` returns valid WireGuard INI with `[Interface]` and `[Peer]` sections
-  - `write()` creates file, writes INI, sets permission `0o600`
-  - `delete()` removes file, returns `Ok(())` if already missing
-  - `DNS` field populated (FR-VC-5 leak prevention)
-  - `AllowedIPs` set to `0.0.0.0/0, ::/0` in config
-  - Unit test: write → verify permission 600 → read content → delete → verify gone
-  - Unit test: delete non-existent file → `Ok(())`
-  - `cargo test` passes
-
-### Step 3: Register config module in mod.rs
-
-- [x] **Status**: completed at 2026-03-05T11:43:00+07:00
-- **Scope**: `src-tauri/src/vpn_manager/mod.rs`
-- **Dependencies**: Step 2
-- **Description**: Add `pub mod config;` to `vpn_manager/mod.rs`.
-- **Acceptance Criteria**:
-  - `pub mod config;` added
+  - `src-tauri/binaries/wireguard-go-aarch64-apple-darwin` exists (3.0MB binary)
+  - `src-tauri/binaries/wg-aarch64-apple-darwin` exists (103KB binary)
+  - `src-tauri/binaries/wg-quick-aarch64-apple-darwin` exists (16KB bash script)
+  - `tauri.conf.json` has `bundle.externalBin` listing all 3 sidecars
   - `cargo check` passes
 
----
+### Step 2: VpnError Tunnel Variants + tunnel.rs Implementation
+
+- [x] **Status**: completed at 2026-03-05T12:08:00+07:00
+- **Scope**: `src-tauri/src/error.rs`, `src-tauri/src/vpn_manager/tunnel.rs` (new), `src-tauri/src/vpn_manager/mod.rs`
+- **Dependencies**: Step 1
+- **Description**: Add tunnel error variants to VpnError with AppError conversion. Implement `tunnel.rs` with `tunnel_up()` and `tunnel_down()` functions. Include sidecar path resolution (relative to current executable), osascript command construction, and config delete guarantee via finally pattern.
+- **Acceptance Criteria**:
+  - `VpnError::TunnelUpFailed(String)` -- wg-quick up failure with stderr message
+  - `VpnError::TunnelDownFailed(String)` -- wg-quick down failure with stderr message
+  - `VpnError::SidecarNotFound(String)` -- sidecar binary not found at expected path
+  - All new VpnError variants convert to AppError with correct error codes
+  - `tunnel_up(server_ip, server_public_key, interface_address, dns)` function:
+    - Builds WireGuardConfig from parameters
+    - Writes config via `WireGuardConfig::write()`
+    - Resolves sidecar paths (wireguard-go, wg, wg-quick) relative to current exe
+    - Constructs osascript command with `WG_QUICK_USERSPACE_IMPLEMENTATION` env and PATH
+    - Executes via `std::process::Command`
+    - Deletes config in both success and failure paths
+    - Returns `Ok(())` on success, `Err(VpnError::TunnelUpFailed)` on failure
+  - `tunnel_down(key_pair: &mut WireGuardKeyPair)` function:
+    - Executes `wg-quick down oh-my-vpn-wg0` via osascript sudo
+    - Zeroes WireGuard key pair from memory via `zeroize()` (NFR-SEC-2, ADR-0001)
+    - Returns `Ok(())` on success, `Err(VpnError::TunnelDownFailed)` on failure
+  - `vpn_manager/mod.rs` updated with `pub mod tunnel;`
+  - `cargo check` passes
+
+### Step 3: Unit Tests + Compilation Verification
+
+- [x] **Status**: completed at 2026-03-05T12:10:00+07:00
+- **Scope**: `src-tauri/src/vpn_manager/tunnel.rs` (`#[cfg(test)]` module)
+- **Dependencies**: Step 2
+- **Description**: Add unit tests for sidecar path resolution and osascript command string construction. Run `cargo check` and `cargo test` to verify compilation and non-sudo tests pass.
+- **Acceptance Criteria**:
+  - Unit test: `resolve_sidecar_path()` returns expected path structure
+  - Unit test: osascript command string contains correct env vars, paths, and config path
+  - Unit test: `tunnel_down` command string references correct interface name
+  - `cargo check` passes with zero errors
+  - `cargo test` passes (tunnel up/down are integration-test scope, not unit-tested)
+
+### Step 4: Integration Test (sudo required)
+
+- [x] **Status**: completed at 2026-03-05T12:12:00+07:00
+- **Scope**: `src-tauri/src/vpn_manager/tunnel.rs` (`#[cfg(test)]` module, `#[ignore]` attribute)
+- **Dependencies**: Step 2
+- **Description**: Add an integration test that performs a real tunnel up/down cycle. This test requires sudo (macOS authorization dialog) and a running system, so it is marked `#[ignore]` and run manually via `cargo test -- --ignored`. It validates the full sidecar → osascript → wg-quick → utun flow.
+- **Acceptance Criteria**:
+  - Integration test: `tunnel_up` → verify utun interface exists (via `ifconfig`) → `tunnel_down` → verify interface removed
+  - Test marked `#[ignore]` to skip in CI (requires sudo + network)
+  - Test creates a loopback-only config (no real server needed -- peer endpoint can be localhost)
+  - Key pair zeroed after tunnel_down verified
 
 ## 4. Execution Strategy
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Trivial -- add enum + From impl to existing file |
-| 2 | scout → worker | Main implementation. Scout reads keys.rs patterns + error.rs, worker implements config.rs with tests |
-| 3 | Direct | Single line addition |
+| 1 | Direct | File copy + JSON config edit, trivial |
+| 2 | scout → worker | Core implementation, needs existing pattern context from config.rs and error.rs |
+| 3 | Direct | Unit test addition on top of Step 2 output, single file append |
+| 4 | Direct | Integration test addition, single file append, requires manual run |
 
-**Execution order**: Sequential (1 → 2 → 3)
+**Execution order:**
 
-**Parallel opportunities**: None -- Step 2 depends on Step 1, Step 3 depends on Step 2.
+```plain
+Step 1 → Step 2 → Step 3 → Step 4 (sequential -- each builds on previous)
+```
 
-**Complexity estimates**:
+**Estimated complexity:**
 
-| Step | Tier | Estimated Tokens |
+| Step | Tier | Estimated tokens |
 | --- | --- | --- |
 | 1 | Trivial | < 5K |
-| 2 | Simple | 10--20K |
-| 3 | Trivial | < 5K |
+| 2 | Medium | 20--40K |
+| 3 | Simple | 10--15K |
+| 4 | Simple | 5--10K |
 
-**Risk flags**: None. All APIs verified, patterns established.
+**Risk flags:**
+
+- Step 1: Tauri bash script sidecar bundling (Unverified Assumption #1). If it fails, switch to `bundle.resources` path
+- Step 2: osascript escaping -- shell command string must be properly escaped for AppleScript. Verify with test in Step 3
+- Step 4: Integration test requires sudo prompt -- cannot run in CI, manual verification only
 
 ---
