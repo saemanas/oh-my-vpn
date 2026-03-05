@@ -78,3 +78,5 @@ Server Lifecycle requests region pricing from Provider Manager, which maintains 
 
 - Related: [ADR-0002](0002-use-rust-sdk-for-cloud-providers.md), [ADR-0006](0006-all-providers-in-mvp.md), PRD OQ-4
 - Principles: Explicit over Implicit (prices shown are actual prices, not approximations)
+
+---

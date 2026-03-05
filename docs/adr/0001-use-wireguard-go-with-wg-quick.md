@@ -86,3 +86,5 @@ The VPN Manager orchestrates `wg-quick` as a subprocess, called by Server Lifecy
 
 - Related: [ADR-0003](0003-no-network-extension-for-mvp.md), PRD OQ-1, OQ-3
 - Principles: Fail Fast, Reversibility
+
+---

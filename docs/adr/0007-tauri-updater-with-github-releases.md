@@ -65,3 +65,5 @@ The Tauri updater checks a JSON endpoint (hosted on GitHub Releases) on each app
 
 - Related: [deployment.md](../architecture/deployment.md), PRD OQ-6
 - Principles: Reversibility (users can choose manual over auto-update)
+
+---

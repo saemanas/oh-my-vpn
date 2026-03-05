@@ -12,3 +12,5 @@ If this PR adds a service, module, or external dependency:
 - [ ] Cross-references in existing docs still resolve
 
 If none of the above apply, delete this section.
+
+---

@@ -172,3 +172,5 @@ classDiagram
 | 3 | Trivial | < 5K |
 
 **Risk flags**: None. All APIs verified, patterns established.
+
+---

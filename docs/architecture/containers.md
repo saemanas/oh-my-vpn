@@ -134,3 +134,5 @@ Persists user preferences that survive across sessions: last-used provider and r
 - **Server Lifecycle as orchestrator**: Server Lifecycle coordinates both Provider Manager (cloud API) and VPN Manager (tunnel), keeping the connect/disconnect flow in one place rather than spreading it across IPC handlers
 - **Session Tracker queries providers directly**: Orphaned server detection on app launch requires querying all registered providers' server lists (FR-SL-6), so Session Tracker depends on Provider Manager rather than going through Server Lifecycle
 - **Preferences Store is separate from Session Tracker**: Session Tracker persists minimal state for orphan detection (server ID, provider, region, timestamp) and clears it on successful disconnection. Preferences Store holds long-lived user settings (last-used region, notification preferences, keyboard shortcuts) that persist indefinitely. Mixing these concerns would couple session lifecycle with user preference management
+
+---
