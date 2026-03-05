@@ -8,14 +8,11 @@ mod provider_manager;
 mod server_lifecycle;
 #[allow(unused)]
 mod session_tracker;
+pub mod tray;
 #[allow(unused)]
 mod vpn_manager;
 
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, PhysicalPosition, Position,
-};
+use tauri::Manager;
 
 use provider_manager::{AwsProvider, GcpProvider, HetznerProvider, ProviderRegistry};
 use server_lifecycle::ServerLifecycle;
@@ -37,54 +34,8 @@ pub fn run() {
                 .expect("app data directory should be resolvable");
             app.manage(ServerLifecycle::new(data_dir));
 
-            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quit_item])?;
-
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app: &tauri::AppHandle, event| {
-                    if event.id().as_ref() == "quit" {
-                        app.exit(0);
-                    }
-                })
-                .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        rect,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(webview_window) = app.get_webview_window("main") {
-                            if let Ok(visible) = webview_window.is_visible() {
-                                if visible {
-                                    let _ = webview_window.hide();
-                                } else {
-                                    let (pos_x, pos_y) = match rect.position {
-                                        tauri::Position::Physical(p) => (p.x as f64, p.y as f64),
-                                        tauri::Position::Logical(p) => (p.x, p.y),
-                                    };
-                                    let (size_w, size_h) = match rect.size {
-                                        tauri::Size::Physical(s) => (s.width as f64, s.height as f64),
-                                        tauri::Size::Logical(s) => (s.width, s.height),
-                                    };
-                                    let x = (pos_x + size_w / 2.0 - 160.0) as i32;
-                                    let y = (pos_y + size_h) as i32;
-                                    let _ = webview_window.set_position(
-                                        Position::Physical(PhysicalPosition::new(x, y)),
-                                    );
-                                    let _ = webview_window.unminimize();
-                                    let _ = webview_window.show();
-                                    let _ = webview_window.set_focus();
-                                }
-                            }
-                        }
-                    }
-                })
-                .build(app)?;
+            // Set up system tray icon and event handlers.
+            tray::setup_tray(app)?;
 
             Ok(())
         })

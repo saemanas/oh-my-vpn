@@ -12,6 +12,7 @@ use zeroize::Zeroize;
 use crate::keychain_adapter::KeychainAdapter;
 use crate::provider_manager::{CloudProvider, ProviderRegistry};
 use crate::session_tracker::{ActiveSession, SessionStatus};
+use crate::tray::{update_tray_icon, VpnState};
 use crate::types::Provider;
 use crate::vpn_manager::keys::WireGuardKeyPair;
 use crate::vpn_manager::tunnel;
@@ -177,6 +178,7 @@ impl ServerLifecycle {
 
         // Emit progress: step 1 -- Creating server.
         let _ = app.emit("connect-progress", ConnectProgress { step: 1 });
+        update_tray_icon(app, VpnState::Connecting);
 
         // Step 3: Generate SSH key pair.
         let ssh_key_pair = SshKeyPair::generate()?;
@@ -233,6 +235,7 @@ impl ServerLifecycle {
         )
         .await
         .map_err(|e| LifecycleError::TunnelFailed(format!("{e:?}")))?;
+        update_tray_icon(app, VpnState::Connected);
 
         // Step 11: Create session + update preferences.
         // Look up hourly cost from the provider's region list.

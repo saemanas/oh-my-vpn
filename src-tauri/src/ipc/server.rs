@@ -9,6 +9,7 @@ use crate::error::{codes, AppError};
 use crate::provider_manager::ProviderRegistry;
 use crate::server_lifecycle::ServerLifecycle;
 use crate::session_tracker::SessionStatus;
+use crate::tray::{update_tray_icon, VpnState};
 use crate::types::{OrphanAction, OrphanedServer, Provider};
 
 /// Provision a VPN server on the given provider and region, then bring up the
@@ -48,18 +49,27 @@ pub async fn connect(
     }
 
     // Delegate to ServerLifecycle::connect().
-    let status = lifecycle.connect(provider, &region, registry.inner(), &app).await?;
-    Ok(status)
+    let result = lifecycle.connect(provider, &region, registry.inner(), &app).await;
+    match result {
+        Ok(status) => Ok(status),
+        Err(e) => {
+            // Connect failed -- reset tray to Disconnected before surfacing the error.
+            update_tray_icon(&app, VpnState::Disconnected);
+            Err(e.into())
+        }
+    }
 }
 
 /// Tear down the active WireGuard tunnel and destroy the remote server.
 #[tauri::command]
 pub async fn disconnect(
+    app: tauri::AppHandle,
     lifecycle: tauri::State<'_, ServerLifecycle>,
     registry: tauri::State<'_, Mutex<ProviderRegistry>>,
 ) -> Result<(), AppError> {
-    let status = lifecycle.disconnect(registry.inner()).await?;
-    Ok(status)
+    lifecycle.disconnect(registry.inner()).await?;
+    update_tray_icon(&app, VpnState::Disconnected);
+    Ok(())
 }
 
 /// Scan all registered providers for servers that were provisioned by this app
