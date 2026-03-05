@@ -6,6 +6,7 @@
 
 pub mod cloud_init;
 pub mod connect;
+pub mod disconnect;
 pub mod ssh_keys;
 
 use std::fmt;
@@ -40,6 +41,10 @@ pub enum LifecycleError {
     PersistenceFailed(String),
     /// A cloud provider API call failed during lifecycle.
     Provider(crate::error::ProviderError),
+    /// Disconnect was called but no active session exists.
+    NoActiveSession,
+    /// Server destruction failed persistently after all retry attempts.
+    DestructionFailed(String),
 }
 
 impl fmt::Display for LifecycleError {
@@ -69,6 +74,10 @@ impl fmt::Display for LifecycleError {
             }
             LifecycleError::Provider(err) => {
                 write!(f, "Provider error: {err:?}")
+            }
+            LifecycleError::NoActiveSession => write!(f, "No active session exists"),
+            LifecycleError::DestructionFailed(msg) => {
+                write!(f, "Server destruction failed: {msg}")
             }
         }
     }
