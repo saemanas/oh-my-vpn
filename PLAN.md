@@ -1,51 +1,55 @@
+> **Status**: Completed at 2026-03-05T20:29:00+07:00
+> **Branch**: feat/menu-bar-icon
+
 ---
-task: "Destruction Confirm Dialog + Error Display"
+task: "Menu Bar Icon -- 3 states with popover toggle and context menu placeholder"
 milestone: "M5"
-module: "M5.5"
-created_at: "2026-03-05T19:43:00+07:00"
-status: "pending"
-branch: "feat/confirm-dialog-error-display"
+module: "M5.6"
+created_at: "2026-03-05T20:01:00+07:00"
+status: "completed"
+branch: "feat/menu-bar-icon"
 ---
 
-> **Status**: Completed at 2026-03-05T19:55:00+07:00
-> **Branch**: feat/confirm-dialog-error-display
-
-# PLAN -- M5.5: Destruction Confirm Dialog + Error Display
+# PLAN -- M5.6: Menu Bar Icon
 
 ## 1. Context
 
 ### A. Problem Statement
 
-ConnectedView's disconnect button currently invokes `disconnect` IPC directly without confirmation. The UI design (§4.F) and cross-cutting concepts (§8.A) require an explicit confirmation dialog before the destructive disconnect-and-destroy flow. Additionally, disconnect errors are displayed as a plain `<p>` tag -- they should use the same Liquid Glass error card pattern already established in ProvisioningView.
+The app currently uses the default 128x128 app icon as the tray icon and all tray logic is inlined in `lib.rs`. The tray icon must reflect 3 VPN states (disconnected, connecting, connected), and the `TrayIcon` handle must be accessible from backend modules to update dynamically during connect/disconnect flows.
 
 ### B. Current State
 
-- **ConnectedView**: disconnect button → `invoke("disconnect")` → pop on success. Errors shown via `<p className="connected-view__error">`.
-- **ProvisioningView**: has an inline error card (Liquid Glass 4-layer sandwich, Cancel/Retry) but it is hardcoded inside the component -- not reusable.
-- **GlassButton**: fully implemented with all variants (`success|error|neutral|warning|info`), loading, disabled, focus ring.
-- **Design tokens**: `--z-overlay: 300`, `--z-modal: 400`, `--blur-overlay: 8px`, `--color-error-tint`, `--color-separator` all exist.
-- **App.tsx Esc handler**: global `Esc` key hides the popover window. ConfirmDialog must stop propagation when open so Esc closes the dialog first, not the popover.
+- **Tray setup**: inlined in `lib.rs` setup closure. `TrayIcon` stored as `_tray` (unused binding -- handle dropped at end of setup but Tauri keeps it alive internally via the builder)
+- **Icon**: `app.default_window_icon()` -- the 128x128 app icon, not a proper menu bar icon
+- **Left-click**: toggles popover visibility (working)
+- **Right-click**: shows context menu with "Quit" item (working)
+- **No icon state updates**: connect/disconnect flows do not touch the tray icon
+- **Backend events**: `connect.rs` already emits `connect-progress` events via `app.emit()`
 
 ### C. Constraints
 
-- Popover is 320px fixed width -- dialog is absolute-positioned inside, not a Portal.
-- ConfirmDialog must be reusable for M6.4 (Quit-while-connected).
-- ErrorCard must replace ProvisioningView's inline error card to prevent duplication.
-- Reduced motion: all animations → `fadeIn 200ms` via token overrides (already handled by tokens.css).
+- macOS menu bar icons should be 22x22 points (44x44 pixels @2x) -- template images
+- Template images: macOS auto-handles dark/light mode coloring
+- No native animation API for tray icons -- must use timer-based icon swapping
+- `TrayIcon` handle needs to be retrievable from `AppHandle` for state updates
 
 ### D. Verified Facts
 
 | # | What was tested | Result | Decision |
 | --- | --- | --- | --- |
-| 1 | ProvisioningView error card structure | Uses Liquid Glass 4-layer with `provisioning-error-card` CSS class, Cancel/Retry GlassButtons | Extract into reusable ErrorCard |
-| 2 | GlassButton variant support | All 5 variants implemented with tint, text color, dark mode, focus ring | Reuse for dialog buttons |
-| 3 | Design tokens for overlay/modal | `--z-overlay: 300`, `--z-modal: 400`, `--blur-overlay: 8px` exist | Use tokens, no hardcoded values |
-| 4 | Global Esc handler in App.tsx | `document.addEventListener("keydown", ...)` hides window on Esc | ConfirmDialog must `stopPropagation` on Esc to close dialog first |
-| 5 | ConnectedView disconnect flow | Direct `invoke("disconnect")` on button click, error as `<p>` text | Wrap with ConfirmDialog, replace error with ErrorCard |
+| 1 | Tauri v2 `TrayIcon::set_icon(Option<Image>)` | Exists in tauri 2.10.3 | Use for dynamic icon updates |
+| 2 | `TrayIcon::set_icon_as_template(bool)` | Exists, macOS only | Use for template icon rendering |
+| 3 | `include_image!` macro | Compile-time PNG → RGBA embed, no feature flags needed | Use for icon constants |
+| 4 | `TrayIconBuilder::new().id("main-tray")` | Can set custom ID for later retrieval via `app.tray_by_id()` | Use custom ID to retrieve handle |
+| 5 | Tauri `image-png` feature | Required only for `Image::from_bytes()` / `Image::from_path()` at runtime | Not needed -- `include_image!` works without it |
 
 ### E. Unverified Assumptions
 
-None. All patterns verified from existing codebase.
+| # | Assumption | Risk | Fallback |
+| --- | --- | --- | --- |
+| 1 | `app.tray_by_id("main-tray")` returns the handle after setup | Low -- documented API | Store `TrayIcon` in Tauri managed state instead |
+| 2 | Timer-based icon swap at 500ms creates smooth connecting animation | Low -- common macOS pattern | Adjust interval or use 2-frame vs 3-frame animation |
 
 ---
 
@@ -54,96 +58,100 @@ None. All patterns verified from existing codebase.
 ### A. Diagram
 
 ```mermaid
-graph TD
-    subgraph components["src/components/"]
-        CD["ConfirmDialog.tsx (new)"]
-        EC["ErrorCard.tsx (new)"]
-        GB["GlassButton.tsx (existing)"]
+flowchart TD
+    subgraph tray["tray.rs"]
+        ICONS["Inline include_image! per state<br/>disconnected / connecting-1 / connecting-2 / connected"]
+        SETUP["setup_tray(app)"]
+        UPDATE["update_tray_icon(app, VpnState)"]
+        ANIM["start/stop connecting animation"]
     end
 
-    subgraph views["src/views/"]
-        CV["ConnectedView.tsx (modify)"]
-        PV["ProvisioningView.tsx (modify)"]
+    subgraph state["VpnState"]
+        S1["Disconnected"]
+        S2["Connecting"]
+        S3["Connected"]
     end
 
-    CV -->|uses| CD
-    CV -->|uses| EC
-    CV -->|uses| GB
-    PV -->|uses| EC
-    PV -->|uses| GB
-    CD -->|uses| GB
+    LIB["lib.rs::setup"] -->|"calls"| SETUP
+    CONNECT["connect.rs"] -->|"Connecting → Connected"| UPDATE
+    IPC["ipc/server.rs"] -->|"Disconnected<br/>(error + disconnect)"| UPDATE
+    state --> UPDATE
+    UPDATE -->|"set_icon + template"| TRAY_ICON["TrayIcon handle"]
+    ANIM -->|"timer swap icons"| TRAY_ICON
 ```
 
 ### B. Decisions
 
-1. **ConfirmDialog as generic modal** -- Props: `open`, `title`, `message`, `confirmLabel`, `confirmVariant`, `onConfirm`, `onCancel`. Reusable for M6.4.
-   - *Principle 4 (Composition)*: small composable unit, not dialog-per-use-case.
-2. **ErrorCard extracted from ProvisioningView** -- Props: `message`, `variant` (`error|warning`, default `error`), `children` (ReactNode action slot).
-   - *Principle 3 (Single Responsibility)*: one component for error display. Variant controls tint color -- `error` for provisioning/generic failures, `warning` for persistent destruction failure with console URL.
-3. **Overlay = absolute inside popover** -- Not a React Portal.
-   - *Principle 1 (Explicit over Implicit)*: no hidden DOM teleportation in a 320px popover.
-4. **Esc key handling** -- ConfirmDialog captures Esc via `onKeyDown` with `stopPropagation` to prevent popover hide.
-   - *Principle 5 (Fail Fast)*: keyboard behavior is explicit, not inherited by accident.
+1. **Template icons** -- macOS auto-handles dark/light mode. Single set of icons, no theme variants needed. Principle: Composition over Inheritance (reuse OS capability)
+2. **Dedicated `tray.rs` module** -- extracts tray setup from `lib.rs`. Principle: Single Responsibility
+3. **`include_image!` for icon embedding** -- compile-time, zero runtime cost, no feature flags. Principle: Fail Fast (missing icon = compile error)
+4. **`tray_by_id()` for handle retrieval** -- avoids adding `TrayIcon` to managed state. Uses Tauri's built-in registry
+5. **Timer-based connecting animation** -- 500ms interval swapping between 2 icon frames. Stopped when state transitions to Connected or Disconnected
 
 ### C. Boundaries
 
-| Component | Responsibility | Props |
-| --- | --- | --- |
-| `ConfirmDialog` | Blur overlay + glass dialog card + Cancel/Confirm buttons + keyboard trap | `open`, `title`, `message`, `confirmLabel`, `confirmVariant`, `onConfirm`, `onCancel` |
-| `ErrorCard` | Liquid Glass error/warning card + message + action slot | `message`, `variant` (`error \| warning`), `children` (action buttons) |
-| `ConnectedView` | Wire ConfirmDialog before disconnect, ErrorCard for disconnect errors | `initialSession` (unchanged) |
+| File | Responsibility |
+| --- | --- |
+| `src-tauri/icons/tray/*.png` | Icon assets (22x22 template PNGs) |
+| `src-tauri/src/tray.rs` | Tray setup, inline `include_image!` per state, state update function, animation timer |
+| `src-tauri/src/lib.rs` | Calls `tray::setup_tray(app)` in setup closure |
+| `src-tauri/src/server_lifecycle/connect.rs` | Calls tray update on state transitions (Connecting, Connected) |
+| `src-tauri/src/ipc/server.rs` | Calls tray update on Disconnected (connect error path + disconnect success) |
 
 ---
 
 ## 3. Steps
 
-### Step 1: Create ConfirmDialog Component
+### Step 1: Create tray icon PNG assets
 
-- [x] **Status**: completed at 2026-03-05T19:52:00+07:00
-- **Scope**: `src/components/ConfirmDialog.tsx`, `src/components/ConfirmDialog.css`
+- [x] **Status**: completed at 2026-03-05T20:18:30+07:00
+- **Scope**: `src-tauri/icons/tray/disconnected.png`, `src-tauri/icons/tray/connecting-1.png`, `src-tauri/icons/tray/connecting-2.png`, `src-tauri/icons/tray/connected.png`
 - **Dependencies**: none
-- **Description**: Create a reusable modal confirmation dialog with blur overlay, Liquid Glass card, Cancel + Confirm buttons. Handle Esc key (close dialog, stopPropagation), Enter key (confirm), focus trap, and reduced motion. Render only when `open` is true.
+- **Description**: Create 22x22 pixel template icon PNGs (black on transparent). Disconnected: shield outline. Connecting frame 1: shield with single dot. Connecting frame 2: shield with two dots. Connected: shield filled. These are macOS template images -- the system handles color inversion for dark mode.
 - **Acceptance Criteria**:
-  - Blur overlay (`backdrop-filter: blur(8px)`) at `z-index: var(--z-overlay)`
-  - Dialog card at `z-index: var(--z-modal)` with Liquid Glass 4-layer sandwich
-  - Cancel (neutral GlassButton) + Confirm (configurable variant GlassButton)
-  - Esc closes dialog via `stopPropagation` (does not hide popover)
-  - Enter triggers confirm action
-  - `aria-modal="true"`, `role="alertdialog"`, `aria-labelledby`, `aria-describedby`
-  - Overlay click triggers cancel (click outside to dismiss)
-  - Fade-in animation: `fadeIn var(--duration-fast) var(--easing-smooth)`
-  - Dark mode: tint and text colors via existing tokens
-  - Reduced motion: handled by tokens.css duration overrides
+  - 4 PNG files at 22x22 pixels in `src-tauri/icons/tray/`
+  - Black foreground on transparent background (template icon convention)
+  - Visually distinguishable at menu bar size
 
-### Step 2: Create ErrorCard Component + Refactor ProvisioningView
+### Step 2: Extract tray module with icon state management
 
-- [x] **Status**: completed at 2026-03-05T19:53:00+07:00
-- **Scope**: `src/components/ErrorCard.tsx`, `src/components/ErrorCard.css`, `src/views/ProvisioningView.tsx`, `src/views/ProvisioningView.css`
-- **Dependencies**: none (parallel-safe with Step 1, but executed sequentially)
-- **Description**: Extract the inline error card from ProvisioningView into a standalone ErrorCard component. Replace ProvisioningView's hardcoded error card markup with ErrorCard. ErrorCard uses Liquid Glass 4-layer sandwich with error tint and accepts children as action slot.
+- [x] **Status**: completed at 2026-03-05T20:23:00+07:00
+- **Scope**: `src-tauri/src/tray.rs`, `src-tauri/src/lib.rs`
+- **Dependencies**: Step 1
+- **Description**: Create `tray.rs` module with: (a) icon constants via `include_image!`, (b) `VpnState` enum, (c) `setup_tray(app)` function that builds the tray icon with custom ID and all event handlers (migrated from `lib.rs`), (d) `update_tray_icon(app_handle, state)` function that sets the correct icon and manages connecting animation timer. Update `lib.rs` to call `tray::setup_tray(app)`.
 - **Acceptance Criteria**:
-  - ErrorCard renders Liquid Glass 4-layer with variant-based tint (`--color-error-tint` or `--color-warning-tint`)
-  - Props: `message: string`, `variant: "error" | "warning"` (default `"error"`), `children: ReactNode` (action buttons slot)
-  - ProvisioningView uses `<ErrorCard message={errorMessage}>` with Cancel/Retry GlassButtons as children
-  - ProvisioningView behavior unchanged after refactor (visual regression: none)
-  - CSS classes moved from `ProvisioningView.css` to `ErrorCard.css`
-  - Dark mode: error text color via existing dark mode tokens
+  - `tray.rs` compiles with all icon constants loaded via `include_image!`
+  - `setup_tray(app)` creates tray with ID `"main-tray"`, left-click popover toggle, right-click context menu
+  - `update_tray_icon(app_handle, VpnState)` sets correct icon per state
+  - Connecting state starts a timer that swaps between 2 animation frames at 500ms
+  - Connected/Disconnected state stops any running animation timer
+  - `lib.rs` setup closure calls `tray::setup_tray(app)` instead of inline tray code
+  - `cargo check` passes
 
-### Step 3: Integrate into ConnectedView
+### Step 3: Wire icon updates to connect/disconnect flows
 
-- [x] **Status**: completed at 2026-03-05T19:55:00+07:00
-- **Scope**: `src/views/ConnectedView.tsx`, `src/views/ConnectedView.css`
-- **Dependencies**: Step 1, Step 2
-- **Description**: Wire ConfirmDialog into ConnectedView's disconnect flow: disconnect button → show ConfirmDialog → on confirm → invoke disconnect IPC. Replace the plain `<p>` error display with ErrorCard + Retry button.
+- [x] **Status**: completed at 2026-03-05T20:27:30+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/connect.rs`, `src-tauri/src/ipc/server.rs`
+- **Dependencies**: Step 2
+- **Description**: Add `tray::update_tray_icon()` calls at state transition points: (a) connect flow start → `Connecting` (in connect.rs), (b) connect flow success → `Connected` (in connect.rs), (c) connect flow failure → `Disconnected` (in ipc/server.rs error path), (d) disconnect flow completion → `Disconnected` (in ipc/server.rs). Disconnected transitions placed at IPC layer because `ServerLifecycle::disconnect()` has no `AppHandle` parameter -- the IPC handler is the natural boundary where `AppHandle` is available.
 - **Acceptance Criteria**:
-  - Disconnect button shows ConfirmDialog with title "Disconnect", message "Server will be destroyed. Continue?", confirmLabel "Destroy", confirmVariant "error"
-  - Cancel returns to connected view (dialog closes)
-  - Confirm triggers `invoke("disconnect")` with loading state on Destroy button
-  - On disconnect error (generic): ErrorCard with `error` variant, error message + Retry button
-  - On disconnect error (persistent destruction failure -- `PROVIDER_DESTRUCTION_FAILED`): ErrorCard with `warning` variant, error message + provider console URL from `AppError.details` + manual deletion guide text (no retry -- session preserved for later attempt)
-  - Retry (generic error) re-opens ConfirmDialog (or re-invokes disconnect -- user choice to confirm again)
-  - Remove old `<p className="connected-view__error">` markup
-  - Remove unused `connected-view__error` CSS rule
+  - Connect start sets tray icon to `Connecting` (animated)
+  - Connect success sets tray icon to `Connected`
+  - Connect failure (auto-cleanup) sets tray icon to `Disconnected`
+  - Disconnect completion sets tray icon to `Disconnected`
+  - No icon update on error paths that don't change VPN state
+  - `cargo check` passes
+
+### Step 4: Verify build and icon rendering
+
+- [x] **Status**: completed at 2026-03-05T20:29:00+07:00
+- **Scope**: Full project build verification
+- **Dependencies**: Step 3
+- **Description**: Run `cargo build` to verify compilation. Run `cargo clippy` for lint. Verify the tray module is properly integrated.
+- **Acceptance Criteria**:
+  - `cargo build` succeeds
+  - `cargo clippy` passes with no warnings in `tray.rs`
+  - `cargo test` passes (no regressions)
 
 ---
 
@@ -151,29 +159,24 @@ graph TD
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Single new component + CSS, clear pattern from existing GlassButton/ProvisioningView |
-| 2 | Direct | Extract + refactor within 2 files, mechanical change |
-| 3 | Direct | Wire existing components into ConnectedView, 1 file modify |
+| 1 | Direct | Asset creation -- programmatic PNG generation via script |
+| 2 | scout → worker | Module extraction + new file creation, needs existing code context |
+| 3 | scout → worker | Wiring into existing files, needs to understand current connect/disconnect flow |
+| 4 | Direct | Build verification commands |
 
-### A. Execution Order
+**Execution order**: Step 1 → Step 2 → Step 3 → Step 4 (strictly sequential)
 
-```plain
-Step 1 ─┐
-Step 2 ─┘→ Step 3 (depends on both)
-```
-
-Sequential execution: Step 1 → Step 2 → Step 3.
-
-### B. Estimated Complexity
+**Estimated complexity**:
 
 | Step | Tier | Notes |
 | --- | --- | --- |
-| 1 | Simple | ~150 lines TSX + ~80 lines CSS |
-| 2 | Simple | Extract + replace, ~100 lines TSX + ~40 lines CSS, mechanical refactor |
-| 3 | Simple | ~30 lines changed in ConnectedView |
+| 1 | Trivial | Script-generated PNG assets |
+| 2 | Medium | New module + refactor `lib.rs` + animation timer logic |
+| 3 | Simple | Add function calls at known locations |
+| 4 | Trivial | Build commands |
 
-### C. Risk Flags
+**Risk flags**:
 
-- **ProvisioningView regression** (Step 2): extracting inline error card could break styling. Mitigate by keeping identical CSS class names in ErrorCard.css.
+- Step 2: Animation timer management (start/stop) needs careful lifecycle handling to avoid leaks. The timer must be stored in a way that `update_tray_icon` can cancel it.
 
 ---
