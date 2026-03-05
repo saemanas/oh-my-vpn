@@ -163,19 +163,24 @@ Verified compatible via `cargo check` and `bun install` on 2026-03-04.
 
 | Crate | Version | Purpose |
 | --- | --- | --- |
-| `tauri` | 2 | App framework (tray-icon feature) |
+| `tauri` | 2 | App framework (tray-icon, macos-private-api features) |
 | `tauri-plugin-opener` | 2 | URL/file opener plugin |
 | `serde` | 1 (derive) | Serialization |
 | `serde_json` | 1 | JSON parsing |
+| `anyhow` | 1 | Error handling |
+| `async-trait` | 0.1 | Async trait support |
 | `security-framework` | 3.7 | macOS Keychain access |
 | `core-foundation` | 0.10 | macOS framework bindings |
-| `tokio` | 1.50 | Async runtime |
+| `tokio` | 1 | Async runtime |
+| `chrono` | 0.4 | Date/time handling |
 | `hcloud` | 0.25 | Hetzner Cloud SDK |
 | `aws-config` | 1 | AWS SDK shared config + credential loading |
 | `aws-sdk-ec2` | 1 | AWS EC2 SDK |
 | `aws-sdk-pricing` | 1 | AWS Pricing API SDK |
 | `base64` | 0.22 | Base64 encoding (EC2 user-data) |
 | `google-cloud-compute-v1` | 2.2 | GCP Compute SDK |
+| `google-cloud-auth` | 1.6 | GCP authentication |
+| `rand_core` | 0.6 | Random number generation (key gen) |
 | `x25519-dalek` | 2.0 | WireGuard key exchange |
 | `ed25519-dalek` | 2.2 | SSH key generation |
 | `zeroize` | 1.8 | Secure memory zeroing |
