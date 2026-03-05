@@ -63,6 +63,54 @@ impl Default for UserPreferences {
     }
 }
 
+// -- UserPreferencesResponse
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserPreferencesResponse {
+    pub last_provider: Option<Provider>,
+    pub last_region: Option<String>,
+    pub notifications_enabled: bool,
+    pub keyboard_shortcut: Option<String>,
+}
+
+// -- PartialUserPreferences
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialUserPreferences {
+    pub last_provider: Option<Option<Provider>>,
+    pub last_region: Option<Option<String>>,
+    pub notifications_enabled: Option<bool>,
+    pub keyboard_shortcut: Option<Option<String>>,
+}
+
+impl UserPreferences {
+    pub fn merge(&mut self, partial: PartialUserPreferences) {
+        if let Some(value) = partial.last_provider {
+            self.last_provider = value;
+        }
+        if let Some(value) = partial.last_region {
+            self.last_region = value;
+        }
+        if let Some(value) = partial.notifications_enabled {
+            self.notifications_enabled = value;
+        }
+        if let Some(value) = partial.keyboard_shortcut {
+            self.keyboard_shortcut = value;
+        }
+    }
+
+    pub fn to_response(&self) -> UserPreferencesResponse {
+        UserPreferencesResponse {
+            last_provider: self.last_provider.clone(),
+            last_region: self.last_region.clone(),
+            notifications_enabled: self.notifications_enabled,
+            keyboard_shortcut: self.keyboard_shortcut.clone(),
+        }
+    }
+}
+
 // -- PreferencesStore
 
 pub struct PreferencesStore {
@@ -294,5 +342,73 @@ mod tests {
 
         assert!(dir.exists(), "directory should be created by save");
         assert!(store.file_path().exists(), "preferences.json should exist");
+    }
+
+    #[test]
+    fn test_merge_partial_fields() {
+        let mut prefs = UserPreferences::default();
+
+        let partial = PartialUserPreferences {
+            last_provider: Some(Some(Provider::Hetzner)),
+            last_region: Some(Some("eu-central".to_string())),
+            notifications_enabled: Some(false),
+            keyboard_shortcut: None, // not set -- should remain unchanged
+        };
+
+        prefs.merge(partial);
+
+        assert_eq!(prefs.last_provider, Some(Provider::Hetzner));
+        assert_eq!(prefs.last_region, Some("eu-central".to_string()));
+        assert!(!prefs.notifications_enabled);
+        assert!(prefs.keyboard_shortcut.is_none()); // unchanged
+        assert_eq!(prefs.schema_version, 1); // untouched
+    }
+
+    #[test]
+    fn test_merge_empty_partial() {
+        let mut prefs = UserPreferences {
+            schema_version: 1,
+            last_provider: Some(Provider::Hetzner),
+            last_region: Some("us-east".to_string()),
+            notifications_enabled: false,
+            keyboard_shortcut: Some("Cmd+Shift+V".to_string()),
+        };
+        let original = prefs.clone();
+
+        let partial = PartialUserPreferences {
+            last_provider: None,
+            last_region: None,
+            notifications_enabled: None,
+            keyboard_shortcut: None,
+        };
+
+        prefs.merge(partial);
+
+        assert_eq!(prefs, original);
+    }
+
+    #[test]
+    fn test_to_response_excludes_schema_version() {
+        let prefs = UserPreferences {
+            schema_version: 1,
+            last_provider: Some(Provider::Hetzner),
+            last_region: Some("eu-central".to_string()),
+            notifications_enabled: true,
+            keyboard_shortcut: Some("Cmd+Shift+V".to_string()),
+        };
+
+        let response = prefs.to_response();
+
+        assert_eq!(response.last_provider, prefs.last_provider);
+        assert_eq!(response.last_region, prefs.last_region);
+        assert_eq!(response.notifications_enabled, prefs.notifications_enabled);
+        assert_eq!(response.keyboard_shortcut, prefs.keyboard_shortcut);
+
+        // schema_version must not appear in the serialized response
+        let json = serde_json::to_string(&response).expect("serialization should succeed");
+        assert!(
+            !json.contains("schemaVersion"),
+            "response JSON must not contain schemaVersion, got: {json}"
+        );
     }
 }
