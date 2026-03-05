@@ -1,0 +1,156 @@
+/* ── SystemPermissionsView layout ─────────────────────────────────────────── */
+
+.system-permissions-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Section ──────────────────────────────────────────────────────────────── */
+
+.system-permissions-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.system-permissions-section__label {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.system-permissions-section__description {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* ── Info card (Liquid Glass tile) ───────────────────────────────────────── */
+
+.system-permissions-card {
+  border-radius: var(--radius-sm);
+}
+
+.system-permissions-card,
+.system-permissions-card > div {
+  border-radius: var(--radius-sm);
+}
+
+.system-permissions-card__content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  width: 100%;
+}
+
+/* ── Card icon ────────────────────────────────────────────────────────────── */
+
+.system-permissions-card__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ── Card body ────────────────────────────────────────────────────────────── */
+
+.system-permissions-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.system-permissions-card__title {
+  margin: 0;
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+.system-permissions-card__description {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* ── Inline code ──────────────────────────────────────────────────────────── */
+
+.system-permissions-code {
+  font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 0.85em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-primary);
+}
+
+/* ── List (What to Expect) ────────────────────────────────────────────────── */
+
+/*
+ * The list card uses the full card width without a separate icon column.
+ * Overrides the default flex layout set by .system-permissions-card__content.
+ */
+
+.system-permissions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.system-permissions-list__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.system-permissions-list__bullet {
+  font-size: 1rem;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+  .system-permissions-section__label {
+    color: var(--color-text-primary, #e8e8ed);
+  }
+
+  .system-permissions-section__description {
+    color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  }
+
+  .system-permissions-card__title {
+    color: var(--color-text-primary, #e8e8ed);
+  }
+
+  .system-permissions-card__description,
+  .system-permissions-list__item {
+    color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+  }
+
+  .system-permissions-code {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-text-primary, #e8e8ed);
+  }
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  /* No animations in this view -- nothing to disable. */
+}

@@ -7,6 +7,8 @@ type GlassInputProps = {
 	value: string;
 	/** Change handler. */
 	onChange: (value: string) => void;
+	/** Blur handler -- called when the input loses focus. */
+	onBlur?: () => void;
 	/** Placeholder text displayed when empty. */
 	placeholder?: string;
 	/** HTML input type. Default: 'text'. */
@@ -39,6 +41,7 @@ type GlassInputProps = {
 export function GlassInput({
 	value,
 	onChange,
+	onBlur,
 	placeholder,
 	type = "text",
 	error,
@@ -69,6 +72,7 @@ export function GlassInput({
 						type={type}
 						value={value}
 						onChange={(event) => onChange(event.target.value)}
+						onBlur={onBlur}
 						placeholder={placeholder}
 						disabled={disabled}
 						className="glass-input__field"
