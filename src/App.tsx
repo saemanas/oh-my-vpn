@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./App.css";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { PopoverShell } from "./components/PopoverShell";
 import { StackNavigator } from "./navigation/StackNavigator";
 import {
@@ -48,6 +49,56 @@ function NavigateListener() {
 	}, [push]);
 
 	return null;
+}
+
+// ── Quit-Requested Listener ─────────────────────────────────────────────────
+
+/**
+ * Listens for "quit-requested" events from the backend. When the user
+ * tries to quit while a VPN session is active, shows a ConfirmDialog.
+ * On confirm: disconnect then quit. On cancel: dismiss.
+ */
+function QuitRequestedListener() {
+	const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+	const [isQuitting, setIsQuitting] = useState(false);
+
+	useEffect(() => {
+		const unlisten = listen("quit-requested", () => {
+			setShowQuitConfirm(true);
+		});
+		return () => {
+			void unlisten.then((fn) => fn());
+		};
+	}, []);
+
+	const handleConfirmQuit = useCallback(async () => {
+		setIsQuitting(true);
+		try {
+			await invoke("disconnect");
+			await invoke("quit_app");
+		} catch {
+			// If disconnect fails, still allow retry -- do not auto-quit.
+			setIsQuitting(false);
+		}
+	}, []);
+
+	const handleCancelQuit = useCallback(() => {
+		setShowQuitConfirm(false);
+		void invoke("cancel_quit");
+	}, []);
+
+	return (
+		<ConfirmDialog
+			open={showQuitConfirm}
+			title="Quit while connected"
+			message="Server will be destroyed. Continue?"
+			confirmLabel="Destroy & Quit"
+			confirmVariant="error"
+			confirmLoading={isQuitting}
+			onConfirm={() => void handleConfirmQuit()}
+			onCancel={handleCancelQuit}
+		/>
+	);
 }
 
 // ── App ────────────────────────────────────────────────────────────────────
@@ -119,6 +170,7 @@ function App() {
 	return (
 		<NavigationProvider initialView={initialView}>
 			<NavigateListener />
+			<QuitRequestedListener />
 			<PopoverShell>
 				<StackNavigator />
 			</PopoverShell>

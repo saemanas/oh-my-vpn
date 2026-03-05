@@ -6,8 +6,17 @@ use tauri::{
     App, AppHandle, Emitter, Manager, PhysicalPosition, Position,
 };
 
+use crate::server_lifecycle::ServerLifecycle;
+
 /// Global flag to signal the connecting animation task to stop.
 static ANIMATION_STOP: AtomicBool = AtomicBool::new(false);
+
+/// Global flag indicating a quit confirmation dialog is pending.
+///
+/// When `true`, the `on_window_event` handler in `lib.rs` must skip
+/// hiding the window on focus loss -- otherwise the confirmation
+/// dialog vanishes before the user can act.
+pub static QUIT_PENDING: AtomicBool = AtomicBool::new(false);
 
 /// VPN connection state for tray icon indication.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,8 +64,8 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         }),
     )?;
 
-    // -- Quit --
-    let quit = PredefinedMenuItem::quit(app, Some("Quit"))?;
+    // -- Quit (custom item for session-aware handling) --
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -85,6 +94,9 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = window.set_focus();
                     }
                     let _ = app.emit("navigate", id);
+                }
+                "quit" => {
+                    handle_quit(app);
                 }
                 _ => {}
             }
@@ -127,6 +139,35 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         .build(app)?;
 
     Ok(())
+}
+
+/// Handle quit action with session-awareness.
+///
+/// If no active VPN session exists, exit immediately. Otherwise, show
+/// the main window and emit `"quit-requested"` so the frontend can
+/// display a confirmation dialog.
+fn handle_quit(app: &AppHandle) {
+    let lifecycle = app.state::<ServerLifecycle>();
+    let has_session = lifecycle
+        .session_tracker
+        .read_session()
+        .ok()
+        .flatten()
+        .is_some();
+
+    if has_session {
+        // Suppress hide-on-blur while the confirmation dialog is visible.
+        QUIT_PENDING.store(true, Ordering::Relaxed);
+
+        // Show window and let frontend handle confirmation.
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        let _ = app.emit("quit-requested", ());
+    } else {
+        app.exit(0);
+    }
 }
 
 /// Update the tray icon to reflect the current VPN state.
