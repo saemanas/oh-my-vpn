@@ -7,3 +7,5 @@
 pub mod config;
 pub mod keys;
 pub mod tunnel;
+
+pub use tunnel::tunnel_down_interface;

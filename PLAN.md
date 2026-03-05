@@ -1,56 +1,52 @@
 ---
-task: "Server Lifecycle -- Connect Flow"
+task: "Server Lifecycle -- Disconnect Flow"
 milestone: "M4"
-module: "M4.2"
-created_at: "2026-03-05T12:45:00+07:00"
+module: "M4.3"
+created_at: "2026-03-05T13:11:00+07:00"
 status: "completed"
-branch: "feat/server-lifecycle-connect"
+branch: "feat/disconnect-flow"
 ---
 
-> **Status**: Completed at 2026-03-05T13:22:00+07:00
-> **Branch**: feat/server-lifecycle-connect
+> **Status**: Completed at 2026-03-05T13:42:00+07:00
+> **Branch**: feat/disconnect-flow
 
-# PLAN.md -- M4.2: Server Lifecycle -- Connect Flow
+# PLAN -- M4.3: Server Lifecycle -- Disconnect Flow
 
 ## 1. Context
 
 ### A. Problem Statement
 
-Implement the 11-step connect flow that orchestrates Provider Manager, VPN Manager, Session Tracker, and Preferences Store to provision a cloud server with WireGuard and establish a VPN tunnel. This is the core user action -- "click Connect, get VPN."
+M4.2 (Connect Flow) is complete -- the app can provision servers and establish WireGuard tunnels. The disconnect flow is the complement: tear down the tunnel, destroy the server, verify deletion, and clear session state. Without this, users cannot cleanly end a VPN session and servers accumulate as orphans.
 
 ### B. Current State
 
-- `server_lifecycle.rs` exists as an empty stub (doc comments only)
-- `ipc/server.rs::connect` returns `NOT_IMPLEMENTED`
-- All dependencies are implemented: ProviderRegistry (M2), VPN Manager tunnel_up/tunnel_down (M3), SessionTracker (M4.1), PreferencesStore (M1.3), KeychainAdapter (M1.2)
-- `ed25519-dalek` and `ssh-key` crates are NOT in Cargo.toml yet -- needed for SSH key generation
+- `ServerLifecycle` struct owns `SessionTracker` and `PreferencesStore` in `server_lifecycle/mod.rs`
+- `connect()` is implemented in `server_lifecycle/connect.rs`
+- `tunnel::tunnel_down(&mut WireGuardKeyPair)` exists but requires a key pair reference -- key pair is not persisted after connect
+- `CloudProvider::destroy_server()` and `get_server()` exist on the trait
+- `LifecycleError` enum has connect-related variants but lacks disconnect-specific ones
+- `ProviderError::DestructionFailed` and error code `PROVIDER_DESTRUCTION_FAILED` already exist
+- `ActiveSession` contains `server_id`, `provider`, `region` -- sufficient to identify what to destroy
 
 ### C. Constraints
 
-- `tunnel_up` currently generates WireGuard key pair internally -- must be refactored to accept pre-generated key pair (cloud-init needs client public key before provisioning)
-- Server Lifecycle generates BOTH WG key pairs (client + server) so cloud-init can embed server private key and client public key
-- Auto-cleanup required on any failure mid-connect (FR-SL-4)
-- All provider API calls require API key from Keychain -- never cached in memory
+- `wg-quick down` operates by interface name (`oh-my-vpn-wg0`), not by key pair -- key pair is only needed for zeroize
+- Connect flow drops `WireGuardKeyPair` at function end -- no key material persists (correct security behavior)
+- Disconnect must work without stored key material
+- Session state must be preserved on persistent destruction failure (cross-cutting §8.C)
+- Retry up to 3 times with exponential backoff (cross-cutting §2.A)
 
 ### D. Verified Facts
 
-| # | Fact | Evidence |
-| --- | --- | --- |
-| 1 | `ssh-key` 0.6 + `ed25519-dalek` 2.2 compile together and produce valid OpenSSH public keys | `/tmp/ssh-key-test` cargo run success |
-| 2 | `CloudProvider` trait has `create_ssh_key(api_key, public_key, label) -> String` (returns key_id) | `cloud_provider.rs` source |
-| 3 | `CloudProvider::create_server(api_key, region, ssh_key_id, cloud_init) -> ServerInfo` | `cloud_provider.rs` source |
-| 4 | `tunnel_up(server_ip, server_public_key, interface_address, dns)` generates key pair internally | `tunnel.rs` line 105 |
-| 5 | `SessionTracker::create_session(session: &ActiveSession)` writes atomic JSON | `session_tracker.rs` source |
-| 6 | `PreferencesStore::save(preferences)` writes atomic JSON | `preferences_store.rs` source |
-| 7 | `ProviderRegistry` managed as `Mutex<ProviderRegistry>` in Tauri state | `lib.rs` source |
-| 8 | All 3 providers accept `cloud_init` string in create_server (Hetzner=user_data, AWS=user_data base64, GCP=startup-script metadata) | Provider source files |
-| 9 | `ActiveSession` has optional `ssh_key_id` field for crash cleanup | `session_tracker.rs` source |
+1. **`tunnel_down` signature**: requires `&mut WireGuardKeyPair` -- confirmed in `vpn_manager/tunnel.rs:163`. The function runs `wg-quick down oh-my-vpn-wg0` via osascript and then calls `key_pair.zeroize()`. The wg-quick command itself does not use the key pair
+2. **`ActiveSession` fields**: `server_id`, `provider`, `region`, `server_ip`, `created_at`, `hourly_cost`, `ssh_key_id` -- confirmed in `session_tracker.rs:46-53`
+3. **`ProviderRegistry` access**: connect flow uses `&tokio::sync::Mutex<ProviderRegistry>` -- disconnect will follow the same pattern
+4. **Error codes**: `PROVIDER_DESTRUCTION_FAILED` exists in `error.rs:269`, `TUNNEL_TEARDOWN_FAILED` exists in `error.rs:273`, `NOT_FOUND_SESSION` exists in `error.rs:258`
+5. **`KeychainAdapter::retrieve_credential`**: returns `Result<Option<ProviderCredential>>` -- confirmed in connect.rs usage
 
 ### E. Unverified Assumptions
 
-| # | Assumption | Risk | Fallback |
-| --- | --- | --- | --- |
-| 1 | cloud-init with embedded WG server private key + client public key will configure WireGuard correctly on Ubuntu 24.04 | Low -- standard pattern used in production VPN services | Test with real Hetzner server in integration test |
+None -- all technical assumptions verified via code inspection.
 
 ## 2. Architecture
 
@@ -59,181 +55,129 @@ Implement the 11-step connect flow that orchestrates Provider Manager, VPN Manag
 ```mermaid
 sequenceDiagram
     participant SL as ServerLifecycle
+    participant VM as tunnel (VPN Manager)
     participant KA as KeychainAdapter
     participant PR as ProviderRegistry
+    participant CP as CloudProvider
     participant ST as SessionTracker
-    participant PS as PreferencesStore
-    participant VM as VpnManager
 
-    SL->>ST: read_session() -- verify no active session
+    SL->>ST: read_session()
+    ST-->>SL: ActiveSession (or error if none)
+
+    SL->>VM: tunnel_down_interface()
+    VM->>VM: osascript wg-quick down
+    VM-->>SL: Ok / TunnelDownFailed
+
     SL->>KA: retrieve_credential(provider)
+    KA-->>SL: api_key
 
-    rect rgb(230, 245, 255)
-        note over SL,PR: SSH + Server Provisioning
-        SL->>SL: Generate SSH key pair (Ed25519)
-        SL->>PR: create_ssh_key(public_key)
-        SL->>SL: Generate WG server + client key pairs
-        SL->>SL: Build cloud-init script
-        SL->>PR: create_server(region, ssh_key_id, cloud_init)
-        SL->>PR: delete_ssh_key(ssh_key_id)
-        SL->>SL: Zero SSH keys
+    SL->>PR: get(provider)
+    PR-->>SL: &dyn CloudProvider
+
+    SL->>CP: destroy_server(api_key, server_id)
+    CP-->>SL: Ok
+
+    SL->>CP: get_server(api_key, server_id)
+
+    alt Verified deleted
+        CP-->>SL: None
+        SL->>ST: delete_session()
+        SL-->>SL: Ok(())
+    else Still exists -- retry loop (max 3)
+        CP-->>SL: Some(ServerInfo)
+        SL->>SL: exponential backoff (1s, 2s, 4s)
+        SL->>CP: destroy_server + get_server
+        alt Eventually deleted
+            SL->>ST: delete_session()
+        else Persistent failure
+            SL-->>SL: Err(DestructionFailed) with console URL
+        end
     end
-
-    rect rgb(230, 255, 230)
-        note over SL,VM: WireGuard Tunnel
-        SL->>VM: tunnel_up(client_key_pair, server_ip, server_public_key, address, dns)
-    end
-
-    SL->>ST: create_session(server_info, hourly_cost)
-    SL->>PS: save(updated_preferences)
 ```
 
 ### B. Decisions
 
-| Decision | Choice | Rationale |
+| Decision | Rationale | Principle |
 | --- | --- | --- |
-| SSH key crates | `ed25519-dalek` 2.2 + `ssh-key` 0.6 | Project stack specifies these; verified compatible |
-| WG key pair ownership | Server Lifecycle generates both client + server pairs | cloud-init needs client public key; tunnel needs server public key |
-| tunnel_up refactor | Accept `&WireGuardKeyPair` parameter | Key pair must exist before provisioning for cloud-init injection |
-| Auto-cleanup pattern | Cleanup struct tracks created resources, runs compensating actions on failure | Fail Fast principle -- partial state is worse than no state |
-| cloud-init builder | Dedicated `cloud_init.rs` module, provider-agnostic | Single script template works for all 3 providers (Single Responsibility) |
-| Module structure | Directory module: `mod.rs`, `connect.rs`, `ssh_keys.rs`, `cloud_init.rs` | Boundary-based decomposition per concern |
+| Add `tunnel_down_interface()` without key pair param | wg-quick operates by interface name; key pair is already zeroed after connect | Explicit over Implicit |
+| Keep existing `tunnel_down(&mut WireGuardKeyPair)` | Used by connect cleanup where key pair is still in scope | Composition over Inheritance |
+| Add `Provider::console_url()` to types.rs | Reusable by M4.4 orphan detection; single source of truth for console URLs | Single Responsibility |
+| Preserve session on persistent failure | User can retry or manually delete; prevents data loss | Fail Fast (surface error clearly) |
+| Add `NoActiveSession` + `DestructionFailed` to LifecycleError | Distinct error semantics for disconnect vs connect failures | Explicit over Implicit |
 
 ### C. Boundaries
 
 | File | Responsibility |
 | --- | --- |
-| `server_lifecycle/mod.rs` | ServerLifecycle struct, LifecycleError enum, re-exports |
-| `server_lifecycle/connect.rs` | 11-step connect orchestration + ConnectCleanup |
-| `server_lifecycle/ssh_keys.rs` | Ed25519 key pair generation, OpenSSH public key format |
-| `server_lifecycle/cloud_init.rs` | WireGuard cloud-init script template builder |
-| `vpn_manager/tunnel.rs` | Refactored tunnel_up accepting pre-generated key pair |
-| `ipc/server.rs` | IPC connect command wired to ServerLifecycle |
+| `types.rs` | `Provider::console_url()` method |
+| `vpn_manager/tunnel.rs` | `tunnel_down_interface()` -- teardown without key pair |
+| `server_lifecycle/mod.rs` | `pub mod disconnect;`, new error variants, From impls |
+| `server_lifecycle/disconnect.rs` | `ServerLifecycle::disconnect()` implementation + tests |
 
 ## 3. Steps
 
-### Step 1: Add SSH Key Dependencies
-
-- [x] **Status**: completed at 2026-03-05T13:00:00+07:00
-- **Scope**: `src-tauri/Cargo.toml`
-- **Dependencies**: none
-- **Description**: Add `ed25519-dalek` 2.2 (with `rand_core` feature) and `ssh-key` 0.6 (with `ed25519`, `rand_core` features) to Cargo.toml. Run `cargo check` to verify compilation.
-- **Acceptance Criteria**:
-  - `ed25519-dalek` and `ssh-key` added to `[dependencies]`
-  - `cargo check` passes with no errors
-
-### Step 2: Convert server_lifecycle to Directory Module
-
-- [x] **Status**: completed at 2026-03-05T13:00:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle.rs` → `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/error.rs`, `src-tauri/src/lib.rs`
-- **Dependencies**: none
-- **Description**: Move `server_lifecycle.rs` to `server_lifecycle/mod.rs`. Add `LifecycleError` enum with variants for each failure mode. Add `From<LifecycleError> for AppError` conversion in `error.rs`. Define `ServerLifecycle` struct holding `SessionTracker` and `PreferencesStore`. Re-export public types.
-- **Acceptance Criteria**:
-  - `server_lifecycle/mod.rs` exists with `ServerLifecycle` struct and `LifecycleError` enum
-  - `From<LifecycleError> for AppError` implemented in `error.rs`
-  - `lib.rs` compiles with the module path unchanged
-  - `cargo check` passes
-
-### Step 3: SSH Key Generation Module
-
-- [x] **Status**: completed at 2026-03-05T13:10:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/ssh_keys.rs`
-- **Dependencies**: Step 1, Step 2
-- **Description**: Implement `SshKeyPair` struct with Ed25519 key generation using `ed25519-dalek`. Provide `public_key_openssh()` method returning OpenSSH format string via `ssh-key` crate. Implement `Zeroize` for secure memory cleanup. Add unit tests.
-- **Acceptance Criteria**:
-  - `SshKeyPair::generate()` produces valid Ed25519 key pair
-  - `public_key_openssh()` returns string starting with `ssh-ed25519 AAAA...`
-  - `Zeroize` implementation zeroes private key bytes on drop
-  - Unit tests: generate, format, zeroize
-
-### Step 4: Cloud-Init Script Builder
-
-- [x] **Status**: completed at 2026-03-05T13:10:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/cloud_init.rs`
-- **Dependencies**: Step 2
-- **Description**: Build a provider-agnostic cloud-init bash script that installs WireGuard, configures server interface with injected private key, adds client as peer with injected public key, enables IP forwarding, configures firewall (UFW: allow UDP 51820, deny all else), and starts WireGuard. Parameters: server WG private key, client WG public key, server tunnel address (10.0.0.1/24), client tunnel address (10.0.0.2/32).
-- **Acceptance Criteria**:
-  - `build_cloud_init(server_private_key, client_public_key)` returns a valid bash script string
-  - Script installs `wireguard` package
-  - Script creates `/etc/wireguard/wg0.conf` with correct [Interface] and [Peer] sections
-  - Script enables IP forwarding (`sysctl net.ipv4.ip_forward=1`)
-  - Script configures firewall (UFW: allow 51820/udp, deny all incoming)
-  - Script starts WireGuard service (`systemctl enable --now wg-quick@wg0`)
-  - Unit test: verify script contains all required sections
-
-### Step 5: Refactor tunnel_up to Accept Pre-Generated Key Pair
-
-- [x] **Status**: completed at 2026-03-05T13:00:00+07:00
-- **Scope**: `src-tauri/src/vpn_manager/tunnel.rs`
-- **Dependencies**: none
-- **Description**: Change `tunnel_up` signature to accept `key_pair: &WireGuardKeyPair` as the first parameter instead of generating internally. Remove the internal `WireGuardKeyPair::generate()` call. Update all existing tests that reference `tunnel_up`.
-- **Acceptance Criteria**:
-  - `tunnel_up(key_pair, server_ip, server_public_key, interface_address, dns)` signature
-  - No internal key generation in tunnel_up
-  - All existing tests in `tunnel.rs` updated and pass
-  - `cargo check` passes
-
-### Step 6: Connect Flow Orchestration
-
-- [x] **Status**: completed at 2026-03-05T13:18:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/connect.rs`, `src-tauri/src/server_lifecycle/mod.rs`
-- **Dependencies**: Step 3, Step 4, Step 5
-- **Description**: Implement the full 11-step connect flow as `ServerLifecycle::connect()` async method. Steps: (1) verify no active session, (2) retrieve API key from Keychain, (3) generate SSH key pair, (4) register SSH key with provider, (5) generate WG server + client key pairs, (6) build cloud-init, (7) create server, (8) delete SSH key from provider, (9) zero SSH keys, (10) tunnel_up with client key pair, (11) create session + update preferences. Implement `ConnectCleanup` struct that tracks created resources (ssh_key_id, server_id) and runs compensating actions on any failure. All WG and SSH keys zeroed on cleanup.
-- **Acceptance Criteria**:
-  - `ServerLifecycle::connect(provider, region, registry, api_key)` returns `SessionStatus`
-  - Auto-cleanup: if server created but tunnel fails, server is destroyed and SSH key deleted
-  - Auto-cleanup: if SSH key registered but server fails, SSH key deleted
-  - All key material zeroed on success and failure paths
-  - Session file created with server_id, provider, region, server_ip, hourly_cost
-  - Preferences updated with last_provider and last_region
-  - Unit test: verify cleanup is called on simulated failure (mock provider)
-
-### Step 7: Wire IPC Connect Command
+### Step 1: Add utility functions
 
 - [x] **Status**: completed at 2026-03-05T13:22:00+07:00
-- **Scope**: `src-tauri/src/ipc/server.rs`, `src-tauri/src/lib.rs`
-- **Dependencies**: Step 6
-- **Description**: Replace the stub `connect` IPC command with real implementation. Access `ProviderRegistry` and `ServerLifecycle` from Tauri state. Add `ServerLifecycle` to Tauri managed state in `lib.rs`. Validate inputs (provider registered, no active session). Delegate to `ServerLifecycle::connect()`. Return `SessionStatus` on success.
+- **Scope**: `src-tauri/src/types.rs`, `src-tauri/src/vpn_manager/tunnel.rs`
+- **Dependencies**: none
+- **Description**: Add `Provider::console_url()` method returning the provider's cloud console URL for manual server management. Add `tunnel_down_interface()` function that tears down the WireGuard tunnel without requiring a key pair reference.
 - **Acceptance Criteria**:
-  - `connect` IPC command delegates to `ServerLifecycle::connect()`
-  - `ServerLifecycle` added to Tauri managed state in `lib.rs`
-  - Input validation: returns `CONFLICT_SESSION_ACTIVE` if session exists
-  - Input validation: returns `NOT_FOUND_PROVIDER` if provider not registered
-  - Returns `SessionStatus` JSON matching API Design §4.C
-  - `cargo check` passes with all IPC commands registered
+  - `Provider::console_url()` returns correct URLs: Hetzner (`https://console.hetzner.cloud`), AWS (`https://console.aws.amazon.com/ec2`), GCP (`https://console.cloud.google.com/compute`)
+  - `tunnel_down_interface()` runs `wg-quick down oh-my-vpn-wg0` via osascript without key pair parameter
+  - `tunnel_down_interface()` returns `Result<(), VpnError>` with `VpnError::TunnelDownFailed` on failure
+  - Unit tests for `console_url()` (all 3 providers)
+  - Unit test for `tunnel_down_interface` script builder (pure, no I/O)
+
+### Step 2: Implement disconnect flow
+
+- [x] **Status**: completed at 2026-03-05T13:30:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/server_lifecycle/disconnect.rs`
+- **Dependencies**: Step 1
+- **Description**: Add `NoActiveSession` and `DestructionFailed(String)` variants to `LifecycleError` with Display and From<LifecycleError> for AppError mappings. Add `pub mod disconnect;` to mod.rs. Implement `ServerLifecycle::disconnect()` method with the full flow: read session → tunnel down → retrieve API key → destroy server → verify deletion → retry up to 3 times with exponential backoff → delete session on success or return error with console URL on persistent failure.
+- **Acceptance Criteria**:
+  - `disconnect()` returns `Err(NoActiveSession)` when no session file exists
+  - Tunnel teardown via `tunnel_down_interface()` -- continues to destroy even if tunnel teardown fails (tunnel may already be down)
+  - Destruction verified via `get_server()` returning `None`
+  - Retry loop: up to 3 retries with exponential backoff (1s, 2s, 4s) using `tokio::time::sleep`
+  - On persistent failure: session preserved, error details include `console_url` via `serde_json::json!`
+  - On success: `session_tracker.delete_session()` called
+  - `NoActiveSession` maps to `NOT_FOUND_SESSION` AppError code
+  - `DestructionFailed` maps to `PROVIDER_DESTRUCTION_FAILED` AppError code
+
+### Step 3: Add unit tests for disconnect
+
+- [x] **Status**: completed at 2026-03-05T13:40:00+07:00
+- **Scope**: `src-tauri/src/server_lifecycle/disconnect.rs` (tests module)
+- **Dependencies**: Step 2
+- **Description**: Add unit tests using mock CloudProvider (reuse pattern from connect.rs tests). Test: no session returns error, successful disconnect flow, retry on transient failure, persistent failure preserves session, tunnel teardown failure continues to destroy server.
+- **Acceptance Criteria**:
+  - Test: `disconnect_no_session_returns_error` -- empty session tracker → `NoActiveSession`
+  - Test: `disconnect_success_deletes_session` -- mock provider returns None on get_server → session deleted
+  - Test: `disconnect_retries_on_verify_failure` -- mock get_server returns Some first, None on retry → success
+  - Test: `disconnect_persistent_failure_preserves_session` -- mock get_server always returns Some → error returned, session file still exists
+  - Test: `disconnect_continues_after_tunnel_failure` -- tunnel teardown fails but server destruction succeeds
+  - All tests pass with `cargo test`
 
 ## 4. Execution Strategy
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Single dependency addition |
-| 2 | Direct | File move + struct/enum scaffolding |
-| 3 | scout → worker | New module needing ssh-key API knowledge |
-| 4 | scout → worker | New module needing cloud-init format knowledge |
-| 5 | Direct | Small refactor of existing signature |
-| 6 | scout → worker → reviewer | Core orchestration logic, complex, needs quality review |
-| 7 | scout → worker | IPC wiring, follows existing pattern in provider.rs |
+| 1 | scout → worker | 2 independent utility additions, low risk, clear specs |
+| 2 | scout → worker → reviewer | Core business logic with retry/backoff, error handling, session preservation -- needs review |
+| 3 | scout → worker | Test additions following established MockProvider pattern from connect.rs |
 
-### A. Execution Order
+**Execution order**: Step 1 → Step 2 → Step 3 (strictly sequential)
 
-```plain
-Parallel Group A (no dependencies):
-- Step 1: Add SSH key dependencies
-- Step 2: Convert to directory module
-- Step 5: Refactor tunnel_up
+**Estimated complexity**:
 
-Parallel Group B (after Group A):
-- Step 3: SSH Key Generation (needs Step 1 + 2)
-- Step 4: Cloud-Init Builder (needs Step 2)
+- Step 1: Simple (~15K tokens)
+- Step 2: Medium (~40K tokens)
+- Step 3: Medium (~30K tokens)
 
-Sequential (after Group B):
-- Step 6: Connect Flow (needs Step 3 + 4 + 5)
-- Step 7: Wire IPC (needs Step 6)
-```
+**Risk flags**:
 
-### B. Risk Flags
-
-- **Step 5**: Existing tunnel_up integration test (`tunnel_up_down_cycle`) is `#[ignore]` so no CI risk, but the signature change affects the test code
-- **Step 6**: Auto-cleanup logic is complex -- ConnectCleanup must handle partial state correctly. Mock-based unit test validates the pattern but real integration test (with Hetzner) is the true verification
+- Step 2: `disconnect()` shares `ServerLifecycle` impl block with `connect()` across files -- Rust allows this natively (`impl` blocks can span files), verified in existing connect.rs pattern
+- Step 3: Tests cannot call `disconnect()` directly without Keychain mock -- test the retry/destroy logic via mock provider at the component level, same pattern as connect.rs cleanup tests
 
 ---

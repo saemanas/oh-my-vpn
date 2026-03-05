@@ -222,6 +222,16 @@ impl From<LifecycleError> for AppError {
                 None,
             ),
             LifecycleError::Provider(provider_error) => AppError::from(provider_error),
+            LifecycleError::NoActiveSession => AppError::new(
+                codes::NOT_FOUND_SESSION,
+                error.to_string(),
+                None,
+            ),
+            LifecycleError::DestructionFailed(msg) => AppError::new(
+                codes::PROVIDER_DESTRUCTION_FAILED,
+                msg,
+                None,
+            ),
         }
     }
 }

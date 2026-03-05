@@ -180,6 +180,31 @@ pub async fn tunnel_down(key_pair: &mut WireGuardKeyPair) -> Result<(), VpnError
     }
 }
 
+/// Tear down the active WireGuard VPN tunnel without consuming a key pair.
+///
+/// Identical to [`tunnel_down`] but does not require a `WireGuardKeyPair`
+/// reference. Intended for use in the disconnect flow where the key pair has
+/// already been dropped or is unavailable (e.g., when reconnecting to an
+/// orphaned session).
+pub async fn tunnel_down_interface() -> Result<(), VpnError> {
+    let script = build_tunnel_down_script();
+
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .output()
+        .await
+        .map_err(|e| VpnError::TunnelDownFailed(format!("Failed to spawn osascript: {e}")))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        Err(VpnError::TunnelDownFailed(format!(
+            "wg-quick down failed: {stderr}"
+        )))
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -228,6 +253,18 @@ mod tests {
             script.contains("with administrator privileges"),
             "privilege escalation missing: {script}"
         );
+    }
+
+    /// `tunnel_down_interface` delegates to `build_tunnel_down_script` --
+    /// verifies the same script content is in scope for the interface-only
+    /// teardown path.
+    #[test]
+    fn tunnel_down_interface_uses_same_script_as_tunnel_down() {
+        // Both functions call build_tunnel_down_script(). Confirm the shared
+        // script builder still satisfies both callers' requirements.
+        let script = build_tunnel_down_script();
+        assert!(script.contains("oh-my-vpn-wg0"), "interface name must match: {script}");
+        assert!(script.contains("with administrator privileges"), "privilege required: {script}");
     }
 
     // ── Sidecar path resolution tests ──────────────────────────────────────

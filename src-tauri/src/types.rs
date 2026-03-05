@@ -37,6 +37,18 @@ impl Provider {
             _ => None,
         }
     }
+
+    /// Returns the web console URL for the provider's compute dashboard.
+    ///
+    /// Used in the disconnect flow to surface a direct link to the provider
+    /// console so the user can verify server deletion.
+    pub fn console_url(&self) -> &'static str {
+        match self {
+            Provider::Hetzner => "https://console.hetzner.cloud",
+            Provider::Aws => "https://console.aws.amazon.com/ec2",
+            Provider::Gcp => "https://console.cloud.google.com/compute",
+        }
+    }
 }
 
 /// Cloud region with pricing information.
@@ -135,6 +147,13 @@ mod tests {
         assert_eq!(Provider::Hetzner.to_string(), "Hetzner");
         assert_eq!(Provider::Aws.to_string(), "AWS");
         assert_eq!(Provider::Gcp.to_string(), "GCP");
+    }
+
+    #[test]
+    fn test_console_url() {
+        assert_eq!(Provider::Hetzner.console_url(), "https://console.hetzner.cloud");
+        assert_eq!(Provider::Aws.console_url(), "https://console.aws.amazon.com/ec2");
+        assert_eq!(Provider::Gcp.console_url(), "https://console.cloud.google.com/compute");
     }
 
     #[test]
