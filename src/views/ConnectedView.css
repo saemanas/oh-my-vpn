@@ -82,15 +82,6 @@
   gap: var(--space-1);
 }
 
-/* ── Error message ────────────────────────────────────────────────────────── */
-
-.connected-view__error {
-  margin: 0;
-  font-size: var(--font-size-caption);
-  color: var(--color-error-text);
-  line-height: 1.5;
-}
-
 /* ── Dark mode overrides ──────────────────────────────────────────────────── */
 
 @media (prefers-color-scheme: dark) {

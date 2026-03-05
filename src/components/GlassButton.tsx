@@ -2,7 +2,12 @@ import "./GlassButton.css";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type GlassButtonVariant = "success" | "error" | "neutral" | "warning" | "info";
+export type GlassButtonVariant =
+	| "success"
+	| "error"
+	| "neutral"
+	| "warning"
+	| "info";
 
 type GlassButtonProps = {
 	/** Visual variant controlling tint and text color. Default: 'neutral'. */

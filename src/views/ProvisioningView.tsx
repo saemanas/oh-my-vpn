@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ErrorCard } from "../components/ErrorCard";
 import { GlassButton } from "../components/GlassButton";
 import { ProvisioningStepper } from "../components/ProvisioningStepper";
 import { useNavigation } from "../navigation/stack-context";
@@ -175,24 +176,14 @@ export function ProvisioningView({
 
 			{/* Error card with actions */}
 			{hasFailed && (
-				<div className="provisioning-error-card liquidGlass-wrapper">
-					<div className="liquidGlass-effect" />
-					<div className="liquidGlass-tint provisioning-error-card__tint" />
-					<div className="liquidGlass-shine" />
-					<div className="liquidGlass-text provisioning-error-card__content">
-						<p className="provisioning-error-card__message">
-							{errorMessage}
-						</p>
-						<div className="provisioning-error-card__actions">
-							<GlassButton variant="neutral" onClick={handleCancel}>
-								Cancel
-							</GlassButton>
-							<GlassButton variant="warning" onClick={handleRetry}>
-								Retry
-							</GlassButton>
-						</div>
-					</div>
-				</div>
+				<ErrorCard message={errorMessage ?? ""}>
+					<GlassButton variant="neutral" onClick={handleCancel}>
+						Cancel
+					</GlassButton>
+					<GlassButton variant="warning" onClick={handleRetry}>
+						Retry
+					</GlassButton>
+				</ErrorCard>
 			)}
 
 			{/* Cancel button during active provisioning */}
