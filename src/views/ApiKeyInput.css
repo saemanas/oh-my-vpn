@@ -1,0 +1,97 @@
+/* ── ApiKeyInput layout ───────────────────────────────────────────────────── */
+
+.api-key-input {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+/* ── Input fields ─────────────────────────────────────────────────────────── */
+
+.api-key-input__fields {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+/* ── Help link ────────────────────────────────────────────────────────────── */
+
+.api-key-input__help-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0;
+	border: none;
+	background: none;
+	cursor: pointer;
+	font-size: var(--font-size-caption);
+	font-weight: var(--font-weight-medium);
+	color: var(--color-info-text);
+	text-decoration: none;
+	transition: opacity var(--duration-fast) var(--easing-smooth);
+	align-self: flex-start;
+}
+
+.api-key-input__help-link:hover {
+	opacity: 0.75;
+	text-decoration: underline;
+}
+
+.api-key-input__help-link:active {
+	opacity: 0.55;
+}
+
+.api-key-input__help-link:focus-visible {
+	outline: 2px solid var(--color-info);
+	outline-offset: 2px;
+	border-radius: var(--radius-sm);
+}
+
+/* ── General error ────────────────────────────────────────────────────────── */
+
+.api-key-input__error {
+	margin: 0;
+	padding: var(--space-2) var(--space-4);
+	border-radius: var(--radius-sm);
+	background: var(--color-error-tint);
+	border: 1px solid var(--color-error-shine);
+	font-size: var(--font-size-caption);
+	color: var(--color-error-text);
+	line-height: var(--line-height-normal);
+}
+
+/* ── Actions ──────────────────────────────────────────────────────────────── */
+
+.api-key-input__actions {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.api-key-input__actions .glass-btn:first-child {
+	flex: 0 0 auto;
+}
+
+.api-key-input__actions .glass-btn:last-child {
+	flex: 1;
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+	.api-key-input__help-link {
+		color: var(--color-info-text);
+	}
+
+	.api-key-input__error {
+		background: rgba(239, 68, 68, 0.15);
+		border-color: rgba(239, 68, 68, 0.3);
+	}
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+	.api-key-input__help-link {
+		transition: none;
+	}
+}

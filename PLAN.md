@@ -1,55 +1,54 @@
-> **Status**: Completed at 2026-03-05T20:29:00+07:00
-> **Branch**: feat/menu-bar-icon
-
 ---
-task: "Menu Bar Icon -- 3 states with popover toggle and context menu placeholder"
-milestone: "M5"
-module: "M5.6"
-created_at: "2026-03-05T20:01:00+07:00"
+task: "Onboarding Flow -- first-run detection, Welcome, Provider Selection, API Key Input"
+milestone: "M6"
+module: "M6.1"
+created_at: "2026-03-05T20:40:00+07:00"
 status: "completed"
-branch: "feat/menu-bar-icon"
+branch: "feat/onboarding-flow"
 ---
 
-# PLAN -- M5.6: Menu Bar Icon
+> **Status**: Completed at 2026-03-05T22:50:00+07:00
+> **Branch**: feat/onboarding-flow
+
+# PLAN -- M6.1: Onboarding Flow
 
 ## 1. Context
 
 ### A. Problem Statement
 
-The app currently uses the default 128x128 app icon as the tray icon and all tray logic is inlined in `lib.rs`. The tray icon must reflect 3 VPN states (disconnected, connecting, connected), and the `TrayIcon` handle must be accessible from backend modules to update dynamically during connect/disconnect flows.
+The app shows "No cloud providers configured. Add credentials to get started." on first launch, but there is no UI to add credentials. Users need an onboarding flow: Welcome → Provider Selection → API Key Input → Registration. The backend `register_provider` IPC already exists (M2.5), only frontend views are missing.
 
 ### B. Current State
 
-- **Tray setup**: inlined in `lib.rs` setup closure. `TrayIcon` stored as `_tray` (unused binding -- handle dropped at end of setup but Tauri keeps it alive internally via the builder)
-- **Icon**: `app.default_window_icon()` -- the 128x128 app icon, not a proper menu bar icon
-- **Left-click**: toggles popover visibility (working)
-- **Right-click**: shows context menu with "Quit" item (working)
-- **No icon state updates**: connect/disconnect flows do not touch the tray icon
-- **Backend events**: `connect.rs` already emits `connect-progress` events via `app.emit()`
+- **App.tsx**: checks `get_session_status` on mount, routes to ConnectedView or DisconnectedView
+- **DisconnectedView**: empty state when `providers.length === 0` shows text message, no action
+- **StackNavigator**: push/pop with spring easing horizontal slide (650ms), used by all views
+- **GlassButton**: reusable Liquid Glass button with variant/loading/disabled states
+- **No GlassInput**: no reusable input component exists -- API key input needs one
+- **NavigationProvider**: has `push`/`pop` but no `reset` (needed for onboarding completion)
 
 ### C. Constraints
 
-- macOS menu bar icons should be 22x22 points (44x44 pixels @2x) -- template images
-- Template images: macOS auto-handles dark/light mode coloring
-- No native animation API for tray icons -- must use timer-based icon swapping
-- `TrayIcon` handle needs to be retrievable from `AppHandle` for state updates
+- Onboarding completes with minimum 1 provider registered (UX §6.A)
+- Validation errors must show specific type: invalid key, insufficient permissions, network failure (UX §6.A)
+- Stack navigation between onboarding screens (UI §5.E wireframe)
+- Liquid Glass styling on all interactive elements
 
 ### D. Verified Facts
 
 | # | What was tested | Result | Decision |
 | --- | --- | --- | --- |
-| 1 | Tauri v2 `TrayIcon::set_icon(Option<Image>)` | Exists in tauri 2.10.3 | Use for dynamic icon updates |
-| 2 | `TrayIcon::set_icon_as_template(bool)` | Exists, macOS only | Use for template icon rendering |
-| 3 | `include_image!` macro | Compile-time PNG → RGBA embed, no feature flags needed | Use for icon constants |
-| 4 | `TrayIconBuilder::new().id("main-tray")` | Can set custom ID for later retrieval via `app.tray_by_id()` | Use custom ID to retrieve handle |
-| 5 | Tauri `image-png` feature | Required only for `Image::from_bytes()` / `Image::from_path()` at runtime | Not needed -- `include_image!` works without it |
+| 1 | `register_provider` IPC signature | `(provider, api_key, account_label)` → `ProviderInfo` | Use directly from ApiKeyInput |
+| 2 | `list_providers` IPC returns | Empty array when no providers → onboarding trigger | Check in App.tsx init |
+| 3 | Error codes for validation | `AUTH_INVALID_KEY`, `AUTH_INSUFFICIENT_PERMISSIONS`, `PROVIDER_TIMEOUT` defined | Map to user-friendly messages |
+| 4 | StackNavigator push/pop | `push(id, title, component)` / `pop()` | Use for onboarding screen transitions |
+| 5 | GlassButton pattern | 4-layer Liquid Glass sandwich with variant/loading/disabled | Replicate for GlassInput |
 
 ### E. Unverified Assumptions
 
 | # | Assumption | Risk | Fallback |
 | --- | --- | --- | --- |
-| 1 | `app.tray_by_id("main-tray")` returns the handle after setup | Low -- documented API | Store `TrayIcon` in Tauri managed state instead |
-| 2 | Timer-based icon swap at 500ms creates smooth connecting animation | Low -- common macOS pattern | Adjust interval or use 2-frame vs 3-frame animation |
+| 1 | Adding `reset` to NavigationProvider won't break existing views | Low -- additive change | Use `pop` repeatedly to reach root, then `push` new view |
 
 ---
 
@@ -59,99 +58,133 @@ The app currently uses the default 128x128 app icon as the tray icon and all tra
 
 ```mermaid
 flowchart TD
-    subgraph tray["tray.rs"]
-        ICONS["Inline include_image! per state<br/>disconnected / connecting-1 / connecting-2 / connected"]
-        SETUP["setup_tray(app)"]
-        UPDATE["update_tray_icon(app, VpnState)"]
-        ANIM["start/stop connecting animation"]
+    subgraph app["App.tsx"]
+        INIT["checkSession + list_providers"]
     end
 
-    subgraph state["VpnState"]
-        S1["Disconnected"]
-        S2["Connecting"]
-        S3["Connected"]
+    subgraph onboarding["Onboarding Views"]
+        WS["WelcomeScreen"]
+        PS["ProviderSelection"]
+        AKI["ApiKeyInput"]
+        SUCCESS["SuccessScreen"]
     end
 
-    LIB["lib.rs::setup"] -->|"calls"| SETUP
-    CONNECT["connect.rs"] -->|"Connecting → Connected"| UPDATE
-    IPC["ipc/server.rs"] -->|"Disconnected<br/>(error + disconnect)"| UPDATE
-    state --> UPDATE
-    UPDATE -->|"set_icon + template"| TRAY_ICON["TrayIcon handle"]
-    ANIM -->|"timer swap icons"| TRAY_ICON
+    subgraph existing["Existing"]
+        DV["DisconnectedView"]
+        NAV["StackNavigator"]
+    end
+
+    INIT -->|"no providers"| WS
+    INIT -->|"has providers"| DV
+    WS -->|"push"| PS
+    PS -->|"push(provider)"| AKI
+    AKI -->|"register_provider IPC"| VALIDATE{result}
+    VALIDATE -->|"success"| SUCCESS
+    VALIDATE -->|"error"| AKI
+    SUCCESS -->|"Add another"| PS
+    SUCCESS -->|"Skip"| DONE["reset → DisconnectedView"]
 ```
 
 ### B. Decisions
 
-1. **Template icons** -- macOS auto-handles dark/light mode. Single set of icons, no theme variants needed. Principle: Composition over Inheritance (reuse OS capability)
-2. **Dedicated `tray.rs` module** -- extracts tray setup from `lib.rs`. Principle: Single Responsibility
-3. **`include_image!` for icon embedding** -- compile-time, zero runtime cost, no feature flags. Principle: Fail Fast (missing icon = compile error)
-4. **`tray_by_id()` for handle retrieval** -- avoids adding `TrayIcon` to managed state. Uses Tauri's built-in registry
-5. **Timer-based connecting animation** -- 500ms interval swapping between 2 icon frames. Stopped when state transitions to Connected or Disconnected
+1. **First-run detection in App.tsx** -- `list_providers` returns empty array → set WelcomeScreen as initialView. Single init point, no duplicate logic. Principle: Single Responsibility
+2. **Stack navigation reuse** -- existing StackNavigator handles all transitions. No new routing system. Principle: Composition over Inheritance
+3. **GlassInput component** -- reusable Liquid Glass input following same 4-layer pattern as GlassButton. Principle: Composition over Inheritance
+4. **NavigationProvider reset** -- add `reset(view)` function to replace entire stack with a single view. Needed for onboarding → DisconnectedView transition. Principle: Explicit over Implicit
+5. **Error-specific messages** -- map backend error codes to user-friendly guidance per UX spec. Principle: Fail Fast
+6. **Add More flow** -- after successful registration, show success confirmation with "Add another provider" and "Skip" options. "Add another" pops back to ProviderSelection; "Skip" resets to DisconnectedView. Minimum 1 provider required per UX §6.A
 
 ### C. Boundaries
 
 | File | Responsibility |
 | --- | --- |
-| `src-tauri/icons/tray/*.png` | Icon assets (22x22 template PNGs) |
-| `src-tauri/src/tray.rs` | Tray setup, inline `include_image!` per state, state update function, animation timer |
-| `src-tauri/src/lib.rs` | Calls `tray::setup_tray(app)` in setup closure |
-| `src-tauri/src/server_lifecycle/connect.rs` | Calls tray update on state transitions (Connecting, Connected) |
-| `src-tauri/src/ipc/server.rs` | Calls tray update on Disconnected (connect error path + disconnect success) |
+| `src/components/GlassInput.tsx` + `.css` | Liquid Glass input component (default/focus/error/success/disabled states) |
+| `src/views/WelcomeScreen.tsx` + `.css` | Welcome screen with Get Started button |
+| `src/views/ProviderSelection.tsx` + `.css` | Provider cards (Hetzner, AWS, GCP) with push to ApiKeyInput |
+| `src/views/ApiKeyInput.tsx` + `.css` | API key + account label input, IPC validation, error display, success → push SuccessScreen |
+| `src/views/SuccessScreen.tsx` + `.css` | "Provider connected" confirmation, "Add another provider" + "Skip" buttons |
+| `src/App.tsx` | First-run detection via `list_providers` in init |
+| `src/navigation/stack-context.tsx` | Add `reset` function to NavigationProvider |
 
 ---
 
 ## 3. Steps
 
-### Step 1: Create tray icon PNG assets
+### Step 1: Create GlassInput component
 
-- [x] **Status**: completed at 2026-03-05T20:18:30+07:00
-- **Scope**: `src-tauri/icons/tray/disconnected.png`, `src-tauri/icons/tray/connecting-1.png`, `src-tauri/icons/tray/connecting-2.png`, `src-tauri/icons/tray/connected.png`
+- [x] **Status**: completed at 2026-03-05T22:30:00+07:00
+- **Scope**: `src/components/GlassInput.tsx`, `src/components/GlassInput.css`
 - **Dependencies**: none
-- **Description**: Create 22x22 pixel template icon PNGs (black on transparent). Disconnected: shield outline. Connecting frame 1: shield with single dot. Connecting frame 2: shield with two dots. Connected: shield filled. These are macOS template images -- the system handles color inversion for dark mode.
+- **Description**: Create a reusable Liquid Glass input component following the same 4-layer sandwich pattern as GlassButton. States: default, focus (enhanced shine), error (red tint + inline error below), success (green check icon), disabled. Props: `value`, `onChange`, `placeholder`, `type`, `error`, `success`, `disabled`.
 - **Acceptance Criteria**:
-  - 4 PNG files at 22x22 pixels in `src-tauri/icons/tray/`
-  - Black foreground on transparent background (template icon convention)
-  - Visually distinguishable at menu bar size
+  - 4-layer Liquid Glass structure (wrapper → effect → tint → shine → content)
+  - Focus state with enhanced shine
+  - Error state: red tint + error message below input
+  - Success state: green check icon
+  - Disabled state: opacity 0.4
+  - Keyboard accessible (Tab, focus-visible glow ring)
 
-### Step 2: Extract tray module with icon state management
+### Step 2: Create WelcomeScreen view
 
-- [x] **Status**: completed at 2026-03-05T20:23:00+07:00
-- **Scope**: `src-tauri/src/tray.rs`, `src-tauri/src/lib.rs`
+- [x] **Status**: completed at 2026-03-05T22:32:00+07:00
+- **Scope**: `src/views/WelcomeScreen.tsx`, `src/views/WelcomeScreen.css`
+- **Dependencies**: none
+- **Description**: Welcome screen shown on first launch. Lock icon, "Oh My VPN" title, subtitle explaining the app, "Get Started" GlassButton that pushes ProviderSelection.
+- **Acceptance Criteria**:
+  - Lock icon + app title + subtitle rendered
+  - "Get Started" button pushes ProviderSelection view via StackNavigator
+  - Liquid Glass styling
+  - Centered vertical layout
+
+### Step 3: Create ProviderSelection view
+
+- [x] **Status**: completed at 2026-03-05T22:35:00+07:00
+- **Scope**: `src/views/ProviderSelection.tsx`, `src/views/ProviderSelection.css`
+- **Dependencies**: none
+- **Description**: Three provider cards (Hetzner, AWS, GCP). Each card shows provider name and brief description. Tapping a card pushes ApiKeyInput with the selected provider as prop.
+- **Acceptance Criteria**:
+  - 3 provider cards with Liquid Glass styling
+  - Each card shows provider name
+  - Tapping a card pushes ApiKeyInput view with provider prop
+  - Back navigation via StackNavigator pop
+
+### Step 4: Create ApiKeyInput view + add NavigationProvider reset
+
+- [x] **Status**: completed at 2026-03-05T22:40:00+07:00
+- **Scope**: `src/views/ApiKeyInput.tsx`, `src/views/ApiKeyInput.css`, `src/navigation/stack-context.tsx`
 - **Dependencies**: Step 1
-- **Description**: Create `tray.rs` module with: (a) icon constants via `include_image!`, (b) `VpnState` enum, (c) `setup_tray(app)` function that builds the tray icon with custom ID and all event handlers (migrated from `lib.rs`), (d) `update_tray_icon(app_handle, state)` function that sets the correct icon and manages connecting animation timer. Update `lib.rs` to call `tray::setup_tray(app)`.
+- **Description**: API key input view with: (a) GlassInput for API key, (b) GlassInput for account label, (c) provider-specific help link ("How to get your API key"), (d) Validate GlassButton that calls `register_provider` IPC, (e) loading state during validation, (f) error-specific messages (AUTH_INVALID_KEY → "Invalid API key", AUTH_INSUFFICIENT_PERMISSIONS → "Insufficient permissions", PROVIDER_TIMEOUT → "Network error, retry"), (g) success → push SuccessScreen. Also add `reset(view: ViewEntry)` to NavigationProvider in stack-context.tsx.
 - **Acceptance Criteria**:
-  - `tray.rs` compiles with all icon constants loaded via `include_image!`
-  - `setup_tray(app)` creates tray with ID `"main-tray"`, left-click popover toggle, right-click context menu
-  - `update_tray_icon(app_handle, VpnState)` sets correct icon per state
-  - Connecting state starts a timer that swaps between 2 animation frames at 500ms
-  - Connected/Disconnected state stops any running animation timer
-  - `lib.rs` setup closure calls `tray::setup_tray(app)` instead of inline tray code
-  - `cargo check` passes
+  - API key and account label GlassInput fields
+  - "How to get your API key" link per provider (opens external URL)
+  - Validate button calls `register_provider` IPC with loading state
+  - Error codes mapped to user-friendly messages displayed inline
+  - Success → push SuccessScreen with registered provider info
+  - `reset` function added to NavigationProvider and exported via useNavigation
 
-### Step 3: Wire icon updates to connect/disconnect flows
+### Step 5: Create SuccessScreen view (Add More flow)
 
-- [x] **Status**: completed at 2026-03-05T20:27:30+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/connect.rs`, `src-tauri/src/ipc/server.rs`
-- **Dependencies**: Step 2
-- **Description**: Add `tray::update_tray_icon()` calls at state transition points: (a) connect flow start → `Connecting` (in connect.rs), (b) connect flow success → `Connected` (in connect.rs), (c) connect flow failure → `Disconnected` (in ipc/server.rs error path), (d) disconnect flow completion → `Disconnected` (in ipc/server.rs). Disconnected transitions placed at IPC layer because `ServerLifecycle::disconnect()` has no `AppHandle` parameter -- the IPC handler is the natural boundary where `AppHandle` is available.
+- [x] **Status**: completed at 2026-03-05T22:43:00+07:00
+- **Scope**: `src/views/SuccessScreen.tsx`, `src/views/SuccessScreen.css`
+- **Dependencies**: Step 4
+- **Description**: Confirmation screen after successful provider registration. Shows "Provider connected" message with the registered provider name. Two actions: (a) "Add another provider" -- pops back to ProviderSelection, (b) "Skip" -- resets stack to DisconnectedView. Per UX §6.A, onboarding completes with minimum 1 provider registered; additional providers are optional.
 - **Acceptance Criteria**:
-  - Connect start sets tray icon to `Connecting` (animated)
-  - Connect success sets tray icon to `Connected`
-  - Connect failure (auto-cleanup) sets tray icon to `Disconnected`
-  - Disconnect completion sets tray icon to `Disconnected`
-  - No icon update on error paths that don't change VPN state
-  - `cargo check` passes
+  - "Provider connected" confirmation with provider name
+  - "Add another provider" button pops stack back to ProviderSelection
+  - "Skip" button resets stack to DisconnectedView (uses `reset` from Step 4)
+  - Liquid Glass styling on both buttons
 
-### Step 4: Verify build and icon rendering
+### Step 6: Wire first-run detection in App.tsx
 
-- [x] **Status**: completed at 2026-03-05T20:29:00+07:00
-- **Scope**: Full project build verification
-- **Dependencies**: Step 3
-- **Description**: Run `cargo build` to verify compilation. Run `cargo clippy` for lint. Verify the tray module is properly integrated.
+- [x] **Status**: completed at 2026-03-05T22:50:00+07:00
+- **Scope**: `src/App.tsx`
+- **Dependencies**: Step 2, Step 4
+- **Description**: Modify App.tsx `checkSession` to also call `list_providers`. If empty array returned and no active session, set WelcomeScreen as initialView instead of DisconnectedView.
 - **Acceptance Criteria**:
-  - `cargo build` succeeds
-  - `cargo clippy` passes with no warnings in `tray.rs`
-  - `cargo test` passes (no regressions)
+  - `list_providers` called during init
+  - Empty providers → WelcomeScreen as initialView
+  - Has providers → existing logic (session check → Connected or Disconnected)
+  - No regression on existing session restoration flow
 
 ---
 
@@ -159,24 +192,28 @@ flowchart TD
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Asset creation -- programmatic PNG generation via script |
-| 2 | scout → worker | Module extraction + new file creation, needs existing code context |
-| 3 | scout → worker | Wiring into existing files, needs to understand current connect/disconnect flow |
-| 4 | Direct | Build verification commands |
+| 1 | Direct | Single component, follows existing GlassButton pattern |
+| 2 | Direct | Simple static view |
+| 3 | Direct | Simple static view with push |
+| 4 | scout → worker | IPC integration + error handling + stack reset + stack-context.tsx modification, needs codebase context |
+| 5 | Direct | Simple view with two buttons, uses existing navigation functions |
+| 6 | Direct | Small App.tsx modification |
 
-**Execution order**: Step 1 → Step 2 → Step 3 → Step 4 (strictly sequential)
+**Execution order**: Step 1 → Step 2 → Step 3 → Step 4 → Step 5 → Step 6 (strictly sequential)
 
 **Estimated complexity**:
 
 | Step | Tier | Notes |
 | --- | --- | --- |
-| 1 | Trivial | Script-generated PNG assets |
-| 2 | Medium | New module + refactor `lib.rs` + animation timer logic |
-| 3 | Simple | Add function calls at known locations |
-| 4 | Trivial | Build commands |
+| 1 | Simple | New component following established pattern |
+| 2 | Trivial | Static content + single button |
+| 3 | Trivial | 3 cards + push navigation |
+| 4 | Medium | IPC + error mapping + stack reset + context modification |
+| 5 | Simple | Success confirmation + Add More / Skip navigation |
+| 6 | Trivial | Small init logic change |
 
 **Risk flags**:
 
-- Step 2: Animation timer management (start/stop) needs careful lifecycle handling to avoid leaks. The timer must be stored in a way that `update_tray_icon` can cancel it.
+- Step 4: `reset` function in NavigationProvider must clear transition state to avoid animation glitches after stack replacement
 
 ---

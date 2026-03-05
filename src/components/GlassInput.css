@@ -1,0 +1,156 @@
+/* GlassInput component styles.
+   Extends liquid-glass.css with input-specific structure, states,
+   and the same 4-layer sandwich pattern as GlassButton.
+   Imported after liquid-glass.css so overrides apply correctly. */
+
+/* ── Container (wraps glass wrapper + error message) ──────────────────── */
+
+.glass-input-container {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+/* ── Shape: Glass Input ───────────────────────────────────────────────── */
+
+.glass-input {
+	padding: 0;
+	border-radius: 8px;
+	cursor: text;
+}
+
+.glass-input,
+.glass-input > div {
+	border-radius: 8px;
+}
+
+.glass-input .liquidGlass-tint {
+	background: rgba(255, 255, 255, 0.18);
+}
+
+/* ── Content layout ───────────────────────────────────────────────────── */
+
+.glass-input__content {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0;
+}
+
+.glass-input__field {
+	flex: 1;
+	border: none;
+	background: transparent;
+	outline: none;
+	font-family: var(--font-family-body);
+	font-size: var(--font-size-body-sm);
+	font-weight: var(--font-weight-regular);
+	color: var(--color-text-primary);
+	padding: 0.5rem 0.75rem;
+	width: 100%;
+	line-height: var(--line-height-normal);
+}
+
+.glass-input__field::placeholder {
+	color: var(--color-text-tertiary);
+}
+
+/* ── Focus state: enhanced shine ──────────────────────────────────────── */
+
+.glass-input:focus-within {
+	box-shadow:
+		0 6px 6px rgba(0, 0, 0, 0.2),
+		0 0 20px rgba(0, 0, 0, 0.1),
+		0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+.glass-input:focus-within .liquidGlass-shine {
+	box-shadow:
+		inset 2px 2px 1px 0 rgba(255, 255, 255, 0.7),
+		inset -1px -1px 1px 1px rgba(255, 255, 255, 0.7);
+}
+
+/* ── Error state ──────────────────────────────────────────────────────── */
+
+.glass-input--error .liquidGlass-tint {
+	background: var(--color-error-tint);
+}
+
+.glass-input--error:focus-within {
+	box-shadow:
+		0 6px 6px rgba(0, 0, 0, 0.2),
+		0 0 20px rgba(0, 0, 0, 0.1),
+		0 0 0 3px rgba(239, 68, 68, 0.4);
+}
+
+.glass-input__error {
+	margin: 0;
+	font-size: var(--font-size-label);
+	color: var(--color-error-text);
+	line-height: var(--line-height-normal);
+	padding-left: 0.75rem;
+}
+
+/* ── Success state ────────────────────────────────────────────────────── */
+
+.glass-input--success .liquidGlass-tint {
+	background: var(--color-success-tint);
+}
+
+.glass-input__check {
+	flex-shrink: 0;
+	font-size: var(--font-size-body-sm);
+	color: var(--color-success-text);
+	padding-right: 0.75rem;
+	line-height: 1;
+}
+
+/* ── Disabled state ───────────────────────────────────────────────────── */
+
+.glass-input:has(.glass-input__field:disabled) {
+	opacity: 0.4;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
+/* ── Dark mode ────────────────────────────────────────────────────────── */
+
+@media (prefers-color-scheme: dark) {
+	.glass-input .liquidGlass-tint {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	.glass-input__field {
+		color: var(--color-text-primary);
+	}
+
+	.glass-input--error .liquidGlass-tint {
+		background: rgba(239, 68, 68, 0.15);
+	}
+
+	.glass-input--success .liquidGlass-tint {
+		background: rgba(34, 197, 94, 0.15);
+	}
+
+	.glass-input__check {
+		color: #4ade80;
+	}
+
+	.glass-input__error {
+		color: #f87171;
+	}
+
+	.glass-input:focus-within .liquidGlass-shine {
+		box-shadow:
+			inset 2px 2px 1px 0 rgba(255, 255, 255, 0.3),
+			inset -1px -1px 1px 1px rgba(255, 255, 255, 0.2);
+	}
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+	.glass-input {
+		transition: opacity 200ms linear;
+	}
+}
