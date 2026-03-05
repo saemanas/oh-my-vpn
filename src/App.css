@@ -1,0 +1,39 @@
+/* ===================================================================
+   App -- Global layout reset
+   Design tokens are in tokens.css (loaded in main.tsx)
+   Window is transparent -- desktop shows through Liquid Glass
+   =================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  /* Tauri: transparent window shows desktop through glass.
+     Browser dev: floral background from reference to verify refraction. */
+  background: url("https://www.publicdomainpictures.net/pictures/610000/velka/seamless-floral-wallpaper-art-1715193626Gct.jpg") center center;
+  background-size: 500px;
+  animation: moveBackground 60s linear infinite;
+  font-family: var(--font-family-body);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@keyframes moveBackground {
+  from { background-position: 0% 0%; }
+  to { background-position: 0% -1500%; }
+}
+
+#root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: transparent;
+}

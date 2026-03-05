@@ -1,145 +1,191 @@
 ---
-task: "Server Lifecycle IPC Commands"
-milestone: "M4"
-module: "M4.5"
-created_at: "2026-03-05T14:15:00+07:00"
+task: "Popover Shell + Stack Navigation"
+milestone: "M5"
+module: "M5.1"
+created_at: "2026-03-05T14:26:00+07:00"
 status: "completed"
-branch: "feat/server-lifecycle-ipc"
+branch: "feat/popover-shell-stack-navigation"
 ---
 
-> **Status**: Completed at 2026-03-05T14:22:00+07:00
-> **Branch**: feat/server-lifecycle-ipc
+# PLAN.md -- M5.1: Popover Shell + Stack Navigation
 
-# PLAN -- M4.5: Server Lifecycle IPC Commands
+> **Status**: Completed at 2026-03-05T14:53:00+07:00
+> **Branch**: feat/popover-shell-stack-navigation
 
 ## 1. Context
 
 ### A. Problem Statement
 
-M4.1--M4.4 completed all backend domain logic (connect, disconnect, orphan detection/resolution, session tracking). The IPC layer has stub handlers returning `NOT_IMPLEMENTED` for 4 out of 5 commands. These stubs must be wired to the domain methods so the frontend (M5) can invoke them.
+M5.1 requires building the popover shell (outermost UI container) and stack navigation system that all M5 views (Disconnected, Connected, Provisioning, Error, etc.) will live inside. The frontend is currently a placeholder `App.tsx` with no components or navigation. The Rust tray handler shows the window on left-click but does not position it relative to the tray icon.
 
 ### B. Current State
 
-- `src-tauri/src/ipc/server.rs`: `connect` implemented, `disconnect` / `check_orphaned_servers` / `resolve_orphaned_server` are stubs
-- `src-tauri/src/ipc/session.rs`: `get_session_status` is a stub
-- `src-tauri/capabilities/default.json`: only `core:default` and `opener:default` -- no IPC command permissions
-- All domain methods exist and have unit tests:
-  - `ServerLifecycle::disconnect(&self, &Mutex<ProviderRegistry>) -> Result<(), LifecycleError>`
-  - `ServerLifecycle::check_orphaned_servers(&self, &Mutex<ProviderRegistry>) -> Result<Vec<OrphanedServer>, LifecycleError>`
-  - `ServerLifecycle::resolve_orphaned_server(&self, &str, OrphanAction, &Mutex<ProviderRegistry>) -> Result<Option<SessionStatus>, LifecycleError>`
-  - `SessionTracker::get_status(&self) -> Result<Option<SessionStatus>, SessionError>`
-- Error conversions `From<LifecycleError> for AppError` and `From<SessionError> for AppError` already implemented in `error.rs`
-- Types `OrphanAction`, `OrphanedServer`, `SessionStatus` defined in `types.rs` and `session_tracker.rs`
+- **Frontend**: `src/App.tsx` renders a centered `<h1>Oh My VPN</h1>`. `src/components/` is empty (`.gitkeep` only). `src/tokens.css` is fully integrated with design tokens (colors, spacing, shadows, motion, reduced motion, dark mode).
+- **Backend tray**: `src-tauri/src/lib.rs` has a `TrayIconBuilder` with left-click handler that calls `show()` + `set_focus()` on the main window. No positioning logic. Right-click shows a context menu with "Quit".
+- **Tauri window config**: `tauri.conf.json` defines `main` window as 320x480, `visible: false`, `skipTaskbar: true`, `resizable: false`, `decorations: false`.
+- **Dependencies**: React 19.2.4, TypeScript 5.8.3, Vite 7, `@tauri-apps/api` v2.
 
 ### C. Constraints
 
-- Follow the established IPC pattern from `connect` (in `server.rs`) and `provider.rs`: extract `tauri::State`, validate at boundary, delegate to domain, convert error via `From`
-- Rust signatures must match API Design §4.C and §4.D
-- Tauri v2 capabilities must whitelist all IPC commands
+- No external routing or animation library -- use React Context + CSS transitions only.
+- Must follow Liquid Glass design system (tokens.css values).
+- Reduced motion: all animations → `fadeIn 200ms linear` when `prefers-reduced-motion: reduce`.
+- 320px fixed width popover, content-driven height.
 
 ### D. Input Sources
 
-- Milestone doc: `docs/milestone/2026-03-04-1726-milestone.md` -- M4.5 acceptance criteria
-- API Design: `docs/api-design/2026-03-04-1726-api-design.md` -- §3.B, §3.C, §4.C, §4.D
+- Milestone document: `docs/milestone/2026-03-04-1726-milestone.md` -- M5.1 definition
+- UX Design: `docs/ux-design/2026-03-03-1619-ux-design.md` -- §4 (core flow user journey)
+- UI Design: `docs/ui-design/2026-03-04-0123-ui-design.md` -- §3 (layout system), §4.G (popover navigation)
 
 ### E. Verified Facts
 
-1. `connect` IPC pattern verified: `lifecycle: tauri::State<'_, ServerLifecycle>`, `registry: tauri::State<'_, Mutex<ProviderRegistry>>` -- same pattern applies to all server IPC commands
-2. `disconnect` API design signature: `async fn disconnect() -> Result<(), AppError>` -- but needs `tauri::State` params for `ServerLifecycle` and `ProviderRegistry` (not shown in API design because Tauri state params are invisible to the frontend)
-3. `resolve_orphaned_server` takes `OrphanAction` enum (not raw string) -- `OrphanAction` has `#[serde(rename_all = "lowercase")]` so frontend sends `"destroy"` or `"reconnect"`
-4. `get_session_status` accesses `lifecycle.session_tracker.get_status()` -- `SessionTracker` is a public field on `ServerLifecycle`
-5. `From<LifecycleError> for AppError` handles all lifecycle error variants including `NoActiveSession`, `DestructionFailed`, `OrphanDetectionFailed`, `OrphanReconnectFailed`
-6. `invoke_handler` in `lib.rs` already registers all 5 server/session commands -- no changes needed there
+| # | What was tested | Result | Decision |
+| --- | --- | --- | --- |
+| 1 | Tauri v2 `TrayIconEvent::Click` struct fields | Contains `rect: Rect` with tray icon position + size | Use `rect` to calculate window position under tray icon |
+| 2 | `WebviewWindow::set_position()` availability | Exists, accepts `Position` type | Use for positioning window on each tray click |
+| 3 | React 19.2.4 installed | Confirmed via `bun pm ls` | Modern hooks (useContext, useCallback, useRef) available |
+| 4 | `tokens.css` motion tokens | `--duration-slow: 650ms`, `--easing-spring`, `--easing-smooth` defined, reduced motion media query sets spring → ease, durations capped at 200ms | CSS transitions use token variables directly |
+| 5 | `src/components/` state | Empty (`.gitkeep` only) | No existing patterns to conflict with |
+| 6 | `tauri.conf.json` window config | 320x480, no decorations, hidden by default | Matches popover spec (320px fixed width) |
 
 ### F. Unverified Assumptions
 
-None -- all interfaces verified in codebase.
-
----
+| # | Assumption | Why not verified | Risk | Fallback |
+| --- | --- | --- | --- | --- |
+| 1 | CSS `translateX()` + spring easing renders smoothly in Tauri WebView | Requires runtime visual test | Low -- WebKit-based, CSS transitions well-supported | Use `opacity` fade fallback |
 
 ## 2. Architecture
 
-No structural decisions needed. This is a pure wiring task using the established IPC delegation pattern:
+### A. Diagram
 
-```plain
-IPC Command (tauri::command)
-  → Extract tauri::State<ServerLifecycle> + tauri::State<Mutex<ProviderRegistry>>
-  → Input validation at boundary
-  → Delegate to domain method
-  → Error auto-converted via From<LifecycleError/SessionError> for AppError
+```mermaid
+flowchart TD
+    subgraph rust["Rust (src-tauri/src/lib.rs)"]
+        TRAY[TrayIconEvent::Click]
+        POS[Calculate position from rect]
+        WIN[set_position + show/toggle]
+        BLUR[on_window_event blur → hide]
+        TRAY --> POS --> WIN
+        WIN -.->|focus lost| BLUR
+    end
+
+    subgraph frontend["Frontend (src/)"]
+        subgraph nav["navigation/"]
+            CTX[stack-context.tsx<br/>NavigationContext + Provider]
+            NAV[StackNavigator.tsx<br/>Transition container]
+            CSS_NAV[StackNavigator.css<br/>Push/pop transitions]
+            BACK[BackButton.tsx]
+        end
+        subgraph shell["components/"]
+            SHELL[PopoverShell.tsx<br/>Outer container]
+            CSS_SHELL[PopoverShell.css]
+        end
+        subgraph views["views/"]
+            PH[PlaceholderView.tsx<br/>Demo views for testing]
+        end
+        APP[App.tsx<br/>Provider + Shell + Navigator]
+        CSS_APP[App.css]
+    end
+
+    WIN --> APP
+    APP --> CTX
+    CTX --> NAV
+    NAV --> SHELL
+    SHELL --> PH
+    NAV --> CSS_NAV
+    BACK --> CTX
 ```
 
-The pattern is identical to the existing `connect` command and all `provider.rs` commands. No new modules, types, or error variants needed.
+### B. Decisions
 
----
+| Decision | Alternative considered | Rationale |
+| --- | --- | --- |
+| Custom stack nav (Context + CSS) | react-router, framer-motion | Composition over inheritance (Principle 4) -- zero dependencies, popover does not need a router |
+| CSS transitions (`translateX`) | JS-based animation | Explicit over implicit (Principle 1) -- reuses tokens.css easing/duration values directly |
+| Rust-side window positioning | Frontend JS positioning | Fail fast (Principle 5) -- window position is OS-level, Rust controls it directly via Tauri API |
+| Plain `.css` files | styled-components, Tailwind | Consistency with existing `tokens.css` pattern, no additional dependencies |
+
+### C. Boundaries
+
+| Module | Responsibility |
+| --- | --- |
+| `lib.rs` (Rust) | Tray click → position window under tray icon, toggle show/hide, blur → hide |
+| `navigation/` | Stack state management (push/pop), transition rendering, back button |
+| `components/` | PopoverShell layout (padding, max-height, overflow, entry animation) |
+| `views/` | Placeholder views for navigation testing (replaced by M5.2+ views later) |
+| `App.tsx` | Composition root: NavigationProvider → PopoverShell → StackNavigator |
+
+### D. Transition Spec
+
+| Transition | CSS property | Duration + Easing |
+| --- | --- | --- |
+| Stack push (incoming) | `translateX(100%)` → `translateX(0)` | `var(--duration-slow) var(--easing-spring)` |
+| Stack push (outgoing) | `translateX(0)` → `translateX(-30%)` | `var(--duration-slow) var(--easing-spring)` |
+| Stack pop (incoming) | `translateX(-30%)` → `translateX(0)` | `var(--duration-slow) var(--easing-spring)` |
+| Stack pop (outgoing) | `translateX(0)` → `translateX(100%)` | `var(--duration-slow) var(--easing-spring)` |
+| Popover entry | `opacity 0 + translateY(-8px)` → `opacity 1 + translateY(0)` | `var(--duration-normal) var(--easing-smooth)` |
+| Reduced motion | All above → `opacity` only | `200ms linear` |
 
 ## 3. Steps
 
-### Step 1: Implement disconnect, check_orphaned_servers, resolve_orphaned_server in server.rs
+### Step 1: Tray Popover Positioning (Rust)
 
-- [x] **Status**: completed at 2026-03-05T14:20:00+07:00
-- **Scope**: `src-tauri/src/ipc/server.rs`
+- [x] **Status**: completed at 2026-03-05T14:38:00+07:00
+- **Scope**: `src-tauri/src/lib.rs`
 - **Dependencies**: none
-- **Description**: Replace the 3 NOT_IMPLEMENTED stubs with real implementations that delegate to `ServerLifecycle` domain methods. Follow the same pattern as the existing `connect` command.
+- **Description**: Modify the tray icon left-click handler to calculate window position from `TrayIconEvent::Click { rect, .. }` and position the window centered horizontally under the tray icon. Add toggle behavior (click again to hide). Add `on_window_event` handler to hide window on focus loss (blur/focus-changed).
 - **Acceptance Criteria**:
-  - `disconnect` extracts `ServerLifecycle` and `Mutex<ProviderRegistry>` from state, delegates to `lifecycle.disconnect(&registry)`
-  - `check_orphaned_servers` extracts same state, delegates to `lifecycle.check_orphaned_servers(&registry)`
-  - `resolve_orphaned_server` extracts same state, takes `server_id: String` and `action: OrphanAction`, delegates to `lifecycle.resolve_orphaned_server(&server_id, action, &registry)`
-  - All errors auto-convert via existing `From<LifecycleError> for AppError`
-  - No raw string error codes -- use `From` conversion only
+  - Left-click positions window centered under tray icon (`x = rect.x + rect.width/2 - window_width/2`, `y = rect.y + rect.height`)
+  - Repeated left-click toggles window visibility (show/hide)
+  - Window hides when it loses focus (click outside)
+  - Window config remains: 320px width, no decorations, skip taskbar
 
-### Step 2: Implement get_session_status in session.rs
+### Step 2: Stack Navigation System (Frontend)
 
-- [x] **Status**: completed at 2026-03-05T14:20:00+07:00
-- **Scope**: `src-tauri/src/ipc/session.rs`
+- [x] **Status**: completed at 2026-03-05T14:46:00+07:00
+- **Scope**: `src/navigation/stack-context.tsx`, `src/navigation/StackNavigator.tsx`, `src/navigation/StackNavigator.css`, `src/navigation/BackButton.tsx`
 - **Dependencies**: none
-- **Description**: Replace the NOT_IMPLEMENTED stub with a real implementation that delegates to `SessionTracker::get_status()`.
+- **Description**: Implement the stack navigation system. `NavigationContext` provides `push(id, title, component)`, `pop()`, `canGoBack`, `currentView`. `StackNavigator` renders the stack with CSS `translateX` transitions for push/pop. `BackButton` renders a back chevron that calls `pop()`. All transitions use design tokens. Reduced motion support via CSS media query already in tokens.css.
 - **Acceptance Criteria**:
-  - `get_session_status` extracts `ServerLifecycle` from state, delegates to `lifecycle.session_tracker.get_status()`
-  - Returns `Option<SessionStatus>` (None when no active session)
-  - Error auto-converts via existing `From<SessionError> for AppError`
+  - `push(id, title, component)` adds to stack, triggers slide-in from right (650ms spring)
+  - `pop()` removes from stack, triggers slide-out to right (650ms spring)
+  - `canGoBack` returns `true` when stack depth > 1
+  - Only the top-of-stack view is interactive (previous views are inert)
+  - Reduced motion: transitions become `fadeIn 200ms`
+  - No external animation library used
 
-### Step 3: Update build.rs AppManifest and Tauri capabilities
+### Step 3: PopoverShell + App Integration
 
-- [x] **Status**: completed at 2026-03-05T14:21:00+07:00
-- **Scope**: `src-tauri/build.rs`, `src-tauri/capabilities/default.json`
-- **Dependencies**: Step 1, Step 2
-- **Description**: Configure `build.rs` with `AppManifest` to auto-generate `allow-<command>` / `deny-<command>` permission identifiers for all 11 IPC commands. Then reference those permissions in `default.json` so the frontend can invoke them. Without `AppManifest`, custom app commands are unrestricted (no IPC whitelist enforcement).
+- [x] **Status**: completed at 2026-03-05T14:53:00+07:00
+- **Scope**: `src/components/PopoverShell.tsx`, `src/components/PopoverShell.css`, `src/views/PlaceholderView.tsx`, `src/App.tsx`, `src/App.css`
+- **Dependencies**: Step 2
+- **Description**: Build PopoverShell (320px fixed width, 24px internal padding, 16px section gap, max-height constraint, overflow scroll). Create PlaceholderView with buttons to test push/pop navigation. Rewrite App.tsx to compose NavigationProvider + PopoverShell + StackNavigator. Add Esc key handler to hide window via `@tauri-apps/api`. Add `fadeSlideIn` popover entry animation.
 - **Acceptance Criteria**:
-  - `build.rs` uses `tauri_build::try_build` with `AppManifest::new().commands(&[...])` listing all 11 commands
-  - `default.json` references the auto-generated `allow-<command>` permissions for all 11 commands
-  - Only whitelisted commands are accessible from the frontend (NFR-SEC-7 scaffold)
-
-### Step 4: Compile and test verification
-
-- [x] **Status**: completed at 2026-03-05T14:22:00+07:00
-- **Scope**: full project
-- **Dependencies**: Step 1, Step 2, Step 3
-- **Description**: Run `cargo check` to verify compilation and `cargo test` to verify existing tests still pass.
-- **Acceptance Criteria**:
-  - `cargo check` passes with no errors
-  - `cargo test` passes (all existing unit tests)
-  - No new warnings introduced
-
----
+  - PopoverShell: 320px width, 24px padding (`--space-6`), 16px gap (`--space-4`)
+  - PopoverShell: max-height respects screen bounds, overflow-y auto
+  - PlaceholderView: "Home" view with push button, "Detail" view with content
+  - Esc key hides the window (calls `getCurrentWindow().hide()`)
+  - Popover entry: `fadeSlideIn 400ms var(--easing-smooth)` on mount
+  - Dark/Light mode works automatically via tokens.css
+  - Stack navigation push/pop visually functional with placeholder views
 
 ## 4. Execution Strategy
 
-| Step | Chain | Rationale |
-| --- | --- | --- |
-| 1 | Direct | 3 stub replacements in one file, established pattern |
-| 2 | Direct | 1 stub replacement, trivial |
-| 3 | Direct | build.rs + capabilities JSON update |
-| 4 | Direct | Compile + test commands |
+| Step | Chain | Complexity | Rationale |
+| --- | --- | --- | --- |
+| 1 | scout → worker | Simple | Single Rust file modification, needs tray API context from codebase |
+| 2 | scout → worker | Medium | 4 new files, clear spec but transition logic requires careful CSS |
+| 3 | scout → worker | Medium | 5 files (3 new + 2 modified), integrates Step 2 output |
 
-**Execution order**: Step 1 and Step 2 are independent (parallel-eligible but executed sequentially per policy). Step 3 after both. Step 4 last.
+**Execution order:**
 
 ```plain
-Step 1 → Step 2 → Step 3 → Step 4
+Step 1 → Step 2 → Step 3 (all sequential)
 ```
 
-**Estimated complexity**: All Trivial (< 5K tokens each)
+Step 1 and Step 2 have no mutual dependencies but are executed sequentially per the no-parallel rule. Step 3 depends on Step 2 (navigation system must exist before integration).
 
-**Risk flags**: None
+**Risk flags:** None -- all APIs verified, all files are new or have clear modification points.
 
 ---

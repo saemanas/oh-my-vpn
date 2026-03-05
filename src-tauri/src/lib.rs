@@ -14,7 +14,7 @@ mod vpn_manager;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Manager, PhysicalPosition, Position,
 };
 
 use provider_manager::{AwsProvider, GcpProvider, HetznerProvider, ProviderRegistry};
@@ -53,20 +53,45 @@ pub fn run() {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
+                        rect,
                         ..
                     } = event
                     {
                         let app = tray.app_handle();
                         if let Some(webview_window) = app.get_webview_window("main") {
-                            let _ = webview_window.unminimize();
-                            let _ = webview_window.show();
-                            let _ = webview_window.set_focus();
+                            if let Ok(visible) = webview_window.is_visible() {
+                                if visible {
+                                    let _ = webview_window.hide();
+                                } else {
+                                    let (pos_x, pos_y) = match rect.position {
+                                        tauri::Position::Physical(p) => (p.x as f64, p.y as f64),
+                                        tauri::Position::Logical(p) => (p.x, p.y),
+                                    };
+                                    let (size_w, size_h) = match rect.size {
+                                        tauri::Size::Physical(s) => (s.width as f64, s.height as f64),
+                                        tauri::Size::Logical(s) => (s.width, s.height),
+                                    };
+                                    let x = (pos_x + size_w / 2.0 - 160.0) as i32;
+                                    let y = (pos_y + size_h) as i32;
+                                    let _ = webview_window.set_position(
+                                        Position::Physical(PhysicalPosition::new(x, y)),
+                                    );
+                                    let _ = webview_window.unminimize();
+                                    let _ = webview_window.show();
+                                    let _ = webview_window.set_focus();
+                                }
+                            }
                         }
                     }
                 })
                 .build(app)?;
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(false) = event {
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             ipc::provider::register_provider,
