@@ -1,9 +1,9 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    App, AppHandle, Manager, PhysicalPosition, Position,
+    App, AppHandle, Emitter, Manager, PhysicalPosition, Position,
 };
 
 /// Global flag to signal the connecting animation task to stop.
@@ -22,8 +22,54 @@ pub enum VpnState {
 /// Migrates all inline tray setup from lib.rs. Left-click toggles the main
 /// popover window; right-click shows the Quit context menu.
 pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&quit_item])?;
+    // -- Navigation items --
+    let provider_management = MenuItem::with_id(
+        app,
+        "provider-management",
+        "Provider Management",
+        true,
+        None::<&str>,
+    )?;
+    let system_permissions = MenuItem::with_id(
+        app,
+        "system-permissions",
+        "System Permissions",
+        true,
+        None::<&str>,
+    )?;
+    let settings = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+
+    // -- Separators --
+    let separator_1 = PredefinedMenuItem::separator(app)?;
+    let separator_2 = PredefinedMenuItem::separator(app)?;
+
+    // -- About (native macOS dialog) --
+    let about = PredefinedMenuItem::about(
+        app,
+        Some("About"),
+        Some(AboutMetadata {
+            name: Some("Oh My VPN".to_string()),
+            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            website: Some("https://github.com/saemanas/oh-my-vpn".to_string()),
+            ..Default::default()
+        }),
+    )?;
+
+    // -- Quit --
+    let quit = PredefinedMenuItem::quit(app, Some("Quit"))?;
+
+    let menu = Menu::with_items(
+        app,
+        &[
+            &provider_management,
+            &system_permissions,
+            &settings,
+            &separator_1,
+            &about,
+            &separator_2,
+            &quit,
+        ],
+    )?;
 
     TrayIconBuilder::with_id("main-tray")
         .icon(tauri::include_image!("icons/tray/disconnected.png"))
@@ -31,8 +77,16 @@ pub fn setup_tray(app: &App) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app: &AppHandle, event| {
-            if event.id().as_ref() == "quit" {
-                app.exit(0);
+            let id = event.id().as_ref().to_string();
+            match id.as_str() {
+                "provider-management" | "system-permissions" | "settings" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                    let _ = app.emit("navigate", id);
+                }
+                _ => {}
             }
         })
         .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event| {

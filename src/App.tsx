@@ -1,14 +1,54 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import "./App.css";
 import { PopoverShell } from "./components/PopoverShell";
 import { StackNavigator } from "./navigation/StackNavigator";
-import { NavigationProvider, type ViewEntry } from "./navigation/stack-context";
+import {
+	NavigationProvider,
+	useNavigation,
+	type ViewEntry,
+} from "./navigation/stack-context";
 import type { ProviderInfo, SessionStatus } from "./types/ipc";
 import { ConnectedView } from "./views/ConnectedView";
 import { DisconnectedView } from "./views/DisconnectedView";
+import { ProviderManagementView } from "./views/ProviderManagementView";
+import { SettingsView } from "./views/SettingsView";
+import { SystemPermissionsView } from "./views/SystemPermissionsView";
 import { WelcomeScreen } from "./views/WelcomeScreen";
+
+// ── Navigate Listener ──────────────────────────────────────────────────────
+
+/** View ID → component mapping for tray context menu navigation events. */
+const NAVIGATE_VIEWS: Record<string, { title: string; component: React.ReactNode }> = {
+	"provider-management": { title: "Provider Management", component: <ProviderManagementView /> },
+	"system-permissions": { title: "System Permissions", component: <SystemPermissionsView /> },
+	settings: { title: "Settings", component: <SettingsView /> },
+};
+
+/**
+ * Listens for "navigate" events emitted by the tray context menu and pushes
+ * the corresponding view onto the navigation stack. Must be rendered inside
+ * NavigationProvider.
+ */
+function NavigateListener() {
+	const { push } = useNavigation();
+
+	useEffect(() => {
+		const unlisten = listen<string>("navigate", (event) => {
+			const view = NAVIGATE_VIEWS[event.payload];
+			if (view) {
+				push(event.payload, view.title, view.component);
+			}
+		});
+		return () => {
+			void unlisten.then((fn) => fn());
+		};
+	}, [push]);
+
+	return null;
+}
 
 // ── App ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +118,7 @@ function App() {
 
 	return (
 		<NavigationProvider initialView={initialView}>
+			<NavigateListener />
 			<PopoverShell>
 				<StackNavigator />
 			</PopoverShell>
