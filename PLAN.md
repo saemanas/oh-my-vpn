@@ -3,9 +3,12 @@ task: "M5.2: Disconnected View"
 milestone: "M5"
 module: "M5.2"
 created_at: "2026-03-05T17:11:45+07:00"
-status: "pending"
+status: "completed"
 branch: "feat/menu-bar-disconnected-view"
 ---
+
+> **Status**: Completed at 2026-03-05T18:16:00+07:00
+> **Branch**: feat/menu-bar-disconnected-view
 
 # PLAN: M5.2 -- Disconnected View
 
@@ -71,8 +74,7 @@ flowchart TD
 
     subgraph Components["components/"]
         PSel[ProviderSelector]
-        RL[RegionList]
-        RR[RegionRow]
+        RL["RegionList (includes RegionRow inline)"]
         GB[GlassButton]
     end
 
@@ -83,7 +85,6 @@ flowchart TD
     NP --> PS --> SN --> DV
     DV --> PSel
     DV --> RL
-    RL --> RR
     DV --> GB
     DV --> IT
     PSel --> IT
@@ -138,7 +139,7 @@ src/
 
 ### Step 1: IPC Types + GlassButton
 
-- [ ] **Status**: pending
+- [x] **Status**: completed at 2026-03-05T17:58:00+07:00
 - **Scope**: `src/types/ipc.ts`, `src/components/GlassButton.tsx`, `src/components/GlassButton.css`
 - **Dependencies**: none
 - **Description**: Create TypeScript type definitions mirroring backend Rust types (Provider, ProviderInfo, RegionInfo, SessionStatus, etc.) with exact JSON field names. Create a reusable GlassButton component with Liquid Glass 4-layer sandwich, variant support (success/error/neutral/warning/info), states (default/hover/active/disabled/loading), and focus-visible indicator.
@@ -155,7 +156,7 @@ src/
 
 ### Step 2: ProviderSelector + RegionList
 
-- [ ] **Status**: pending
+- [x] **Status**: completed at 2026-03-05T18:05:00+07:00
 - **Scope**: `src/components/ProviderSelector.tsx`, `src/components/ProviderSelector.css`, `src/components/RegionList.tsx`, `src/components/RegionList.css`
 - **Dependencies**: Step 1
 - **Description**: Create ProviderSelector (renders only when >1 provider, shows provider name + account label, triggers onSelect callback) and RegionList (scrollable list of RegionRow items with flag emoji, region name, hourly cost right-aligned in SF Mono; skeleton loading state with 3 shimmer rows; selected state for last-used region; triggers onSelect callback).
@@ -174,7 +175,7 @@ src/
 
 ### Step 3: DisconnectedView + App Wiring
 
-- [ ] **Status**: pending
+- [x] **Status**: completed at 2026-03-05T18:15:00+07:00
 - **Scope**: `src/views/DisconnectedView.tsx`, `src/views/DisconnectedView.css`, `src/App.tsx` (update)
 - **Dependencies**: Step 1, Step 2
 - **Description**: Create the DisconnectedView container that manages state (providers, regions, selected provider/region, loading states, errors), calls IPC commands (`list_providers`, `list_regions`, `connect`, `get_preferences`), composes ProviderSelector + RegionList + GlassButton, and handles connect flow. Update App.tsx to use DisconnectedView as the initial view, replacing HomeView. Attempt `get_preferences` for last-used region with graceful fallback.

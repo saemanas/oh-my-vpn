@@ -4,7 +4,7 @@ import "./App.css";
 import { PopoverShell } from "./components/PopoverShell";
 import { StackNavigator } from "./navigation/StackNavigator";
 import { NavigationProvider } from "./navigation/stack-context";
-import { HomeView } from "./views/PlaceholderView";
+import { DisconnectedView } from "./views/DisconnectedView";
 
 // ── App ────────────────────────────────────────────────────────────────────
 
@@ -21,9 +21,9 @@ function App() {
 	}, []);
 
 	const initialView = {
-		id: "home",
-		title: "Home",
-		component: <HomeView />,
+		id: "disconnected",
+		title: "Disconnected",
+		component: <DisconnectedView />,
 	};
 
 	return (

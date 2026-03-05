@@ -1,0 +1,56 @@
+/* ── DisconnectedView layout ──────────────────────────────────────────────── */
+
+.disconnected-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Error states ─────────────────────────────────────────────────────────── */
+
+.disconnected-view--error,
+.disconnected-view--empty {
+  align-items: flex-start;
+}
+
+.disconnected-error__message {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-error-text);
+  line-height: 1.5;
+}
+
+.disconnected-error__message--connect {
+  /* Connect-level error: sits between region list and connect button */
+  margin-top: calc(var(--space-1) * -1);
+}
+
+.disconnected-region-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+
+.disconnected-empty__message {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* ── Connecting placeholder (M5.4 target) ─────────────────────────────────── */
+
+.disconnected-connecting-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.disconnected-connecting-placeholder p {
+  margin: 0;
+  font-size: var(--font-size-body-sm);
+  color: var(--color-text-secondary);
+}
