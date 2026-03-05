@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-register-provider"
+description = "Enables the register_provider command without any pre-configured scope."
+commands.allow = ["register_provider"]
+
+[[permission]]
+identifier = "deny-register-provider"
+description = "Denies the register_provider command without any pre-configured scope."
+commands.deny = ["register_provider"]

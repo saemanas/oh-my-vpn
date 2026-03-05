@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-regions"
+description = "Enables the list_regions command without any pre-configured scope."
+commands.allow = ["list_regions"]
+
+[[permission]]
+identifier = "deny-list-regions"
+description = "Denies the list_regions command without any pre-configured scope."
+commands.deny = ["list_regions"]

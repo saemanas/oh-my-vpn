@@ -5,6 +5,17 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "allow-register-provider",
+    "allow-remove-provider",
+    "allow-list-providers",
+    "allow-list-regions",
+    "allow-connect",
+    "allow-disconnect",
+    "allow-check-orphaned-servers",
+    "allow-resolve-orphaned-server",
+    "allow-get-session-status",
+    "allow-get-preferences",
+    "allow-update-preferences"
   ]
 }

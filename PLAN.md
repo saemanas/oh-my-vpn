@@ -1,173 +1,145 @@
 ---
-task: "Auto-Cleanup + Orphan Detection"
+task: "Server Lifecycle IPC Commands"
 milestone: "M4"
-module: "M4.4"
-created_at: "2026-03-05T13:48:00+07:00"
-status: "pending"
-branch: "feat/auto-cleanup-orphan-detection"
+module: "M4.5"
+created_at: "2026-03-05T14:15:00+07:00"
+status: "completed"
+branch: "feat/server-lifecycle-ipc"
 ---
 
-> **Status**: Completed at 2026-03-05T14:12:00+07:00
-> **Branch**: feat/auto-cleanup-orphan-detection
+> **Status**: Completed at 2026-03-05T14:22:00+07:00
+> **Branch**: feat/server-lifecycle-ipc
 
-# PLAN.md -- M4.4: Auto-Cleanup + Orphan Detection
+# PLAN -- M4.5: Server Lifecycle IPC Commands
 
 ## 1. Context
 
 ### A. Problem Statement
 
-When the app crashes, is force-quit, or loses network during server destruction, cloud instances are left running without a corresponding app session -- "orphaned servers." These incur ongoing cost and are a security risk (open WireGuard port). M4.4 implements two capabilities:
-
-1. **Auto-cleanup on connect failure** -- already partially handled by `ConnectCleanup` guard in `connect.rs` (Drop-based). M4.4 adds a standalone cleanup function for post-crash SSH key cleanup and reusable server resource teardown.
-2. **Orphan detection on app launch** -- read persisted `active-session.json`, query provider API to verify server existence, and surface orphaned servers to the caller. User can destroy or reconnect.
+M4.1--M4.4 completed all backend domain logic (connect, disconnect, orphan detection/resolution, session tracking). The IPC layer has stub handlers returning `NOT_IMPLEMENTED` for 4 out of 5 commands. These stubs must be wired to the domain methods so the frontend (M5) can invoke them.
 
 ### B. Current State
 
-- `SessionTracker` persists `ActiveSession` to `active-session.json` with fields: `server_id`, `provider`, `region`, `server_ip`, `created_at`, `hourly_cost`, `ssh_key_id`.
-- `ServerLifecycle::disconnect()` has `destroy_and_cleanup()` -- destroy server with retry + exponential backoff + verification via `get_server()`. This is reusable for orphan destroy.
-- `ConnectCleanup` in `connect.rs` handles Drop-based auto-cleanup during connect. Standalone cleanup for orphan resolution needs a different approach (async, not Drop).
-- `OrphanAction` enum (`Destroy`/`Reconnect`) already exists in `types.rs`.
-- `OrphanedServer` struct does NOT exist yet -- needs to be added to `types.rs`.
-- `LifecycleError` in `mod.rs` lacks orphan-specific variants.
+- `src-tauri/src/ipc/server.rs`: `connect` implemented, `disconnect` / `check_orphaned_servers` / `resolve_orphaned_server` are stubs
+- `src-tauri/src/ipc/session.rs`: `get_session_status` is a stub
+- `src-tauri/capabilities/default.json`: only `core:default` and `opener:default` -- no IPC command permissions
+- All domain methods exist and have unit tests:
+  - `ServerLifecycle::disconnect(&self, &Mutex<ProviderRegistry>) -> Result<(), LifecycleError>`
+  - `ServerLifecycle::check_orphaned_servers(&self, &Mutex<ProviderRegistry>) -> Result<Vec<OrphanedServer>, LifecycleError>`
+  - `ServerLifecycle::resolve_orphaned_server(&self, &str, OrphanAction, &Mutex<ProviderRegistry>) -> Result<Option<SessionStatus>, LifecycleError>`
+  - `SessionTracker::get_status(&self) -> Result<Option<SessionStatus>, SessionError>`
+- Error conversions `From<LifecycleError> for AppError` and `From<SessionError> for AppError` already implemented in `error.rs`
+- Types `OrphanAction`, `OrphanedServer`, `SessionStatus` defined in `types.rs` and `session_tracker.rs`
 
 ### C. Constraints
 
-- Detection must be async -- must not block app launch (NFR-PERF-3: menu bar ready < 3s).
-- 100% detection rate for persisted sessions (NFR-REL-1).
-- Reconnect path: reuse original WireGuard keys stored in session, tunnel up to existing server (skip provisioning). New keys would fail because server's `wg0.conf` hardcodes the original client public key as peer.
-- IPC commands are out of scope (M4.5).
+- Follow the established IPC pattern from `connect` (in `server.rs`) and `provider.rs`: extract `tauri::State`, validate at boundary, delegate to domain, convert error via `From`
+- Rust signatures must match API Design §4.C and §4.D
+- Tauri v2 capabilities must whitelist all IPC commands
 
-### D. Verified Facts
+### D. Input Sources
 
-1. **`destroy_and_cleanup` is reusable** -- method on `ServerLifecycle`, accepts `&ActiveSession`, `&dyn CloudProvider`, `&str` (api_key). Can be called from orphan destroy path without modification.
-2. **`ActiveSession.ssh_key_id` is `Option<String>`** -- populated during connect flow between SSH key registration and deletion. If app crashes after SSH key registration but before deletion, this field holds the provider-side SSH key ID.
-3. **`tunnel::tunnel_up` signature** -- takes `&WireGuardKeyPair`, `server_ip`, `server_public_key`, `interface_address`, `dns`. Reconnect path needs both the server's WG public key and the original client WG key pair.
-4. **Reconnect requires original keys** -- The server's `wg0.conf` (written by cloud-init) hardcodes the original client public key as `[Peer] PublicKey`. Generating new WG keys would cause handshake failure because the server doesn't know the new client. Solution: store `server_wireguard_public_key` AND `client_wireguard_private_key` in `ActiveSession`, reuse the same keys on reconnect. This is acceptable because: (a) keys are per-session and deleted on destroy, (b) the session file is already in the app data directory, (c) NFR-SEC-2 "ephemeral per session" is maintained -- keys exist only during session lifetime.
+- Milestone doc: `docs/milestone/2026-03-04-1726-milestone.md` -- M4.5 acceptance criteria
+- API Design: `docs/api-design/2026-03-04-1726-api-design.md` -- §3.B, §3.C, §4.C, §4.D
 
-### E. Unverified Assumptions
+### E. Verified Facts
 
-1. **Cloud-init WireGuard config is stable across server restarts** -- if the provider reboots the orphaned server, cloud-init may not re-run, but `/etc/wireguard/wg0.conf` persists on disk. The WireGuard systemd service (`wg-quick@wg0`) is enabled, so it auto-starts on reboot. Risk: low. Fallback: reconnect fails, user destroys instead.
+1. `connect` IPC pattern verified: `lifecycle: tauri::State<'_, ServerLifecycle>`, `registry: tauri::State<'_, Mutex<ProviderRegistry>>` -- same pattern applies to all server IPC commands
+2. `disconnect` API design signature: `async fn disconnect() -> Result<(), AppError>` -- but needs `tauri::State` params for `ServerLifecycle` and `ProviderRegistry` (not shown in API design because Tauri state params are invisible to the frontend)
+3. `resolve_orphaned_server` takes `OrphanAction` enum (not raw string) -- `OrphanAction` has `#[serde(rename_all = "lowercase")]` so frontend sends `"destroy"` or `"reconnect"`
+4. `get_session_status` accesses `lifecycle.session_tracker.get_status()` -- `SessionTracker` is a public field on `ServerLifecycle`
+5. `From<LifecycleError> for AppError` handles all lifecycle error variants including `NoActiveSession`, `DestructionFailed`, `OrphanDetectionFailed`, `OrphanReconnectFailed`
+6. `invoke_handler` in `lib.rs` already registers all 5 server/session commands -- no changes needed there
+
+### F. Unverified Assumptions
+
+None -- all interfaces verified in codebase.
+
+---
 
 ## 2. Architecture
 
-### A. Diagram
+No structural decisions needed. This is a pure wiring task using the established IPC delegation pattern:
 
-```mermaid
-flowchart TD
-    subgraph server_lifecycle["server_lifecycle/"]
-        MOD[mod.rs]
-        CL[cleanup.rs]
-        OR[orphan.rs]
-        CO[connect.rs]
-        DC[disconnect.rs]
-    end
-
-    subgraph deps["dependencies"]
-        ST[SessionTracker]
-        PR[ProviderRegistry]
-        KA[KeychainAdapter]
-        TN[tunnel]
-        WG[WireGuardKeyPair]
-    end
-
-    CL -->|cleanup_ssh_key| PR
-    OR -->|check_orphaned_servers| ST
-    OR -->|check_orphaned_servers| PR
-    OR -->|check_orphaned_servers| KA
-    OR -->|resolve_destroy| DC
-    OR -->|resolve_reconnect<br/>reuse stored keys| TN
-    CO -->|ActiveSession with<br/>server wg pubkey +<br/>client wg privkey| ST
+```plain
+IPC Command (tauri::command)
+  → Extract tauri::State<ServerLifecycle> + tauri::State<Mutex<ProviderRegistry>>
+  → Input validation at boundary
+  → Delegate to domain method
+  → Error auto-converted via From<LifecycleError/SessionError> for AppError
 ```
 
-### B. Decisions
+The pattern is identical to the existing `connect` command and all `provider.rs` commands. No new modules, types, or error variants needed.
 
-1. **Store WG keys in `ActiveSession`** -- add `server_wireguard_public_key: Option<String>` and `client_wireguard_private_key: Option<String>`. Stored at connect time (Step 11), cleared on disconnect. Enables reconnect with original keys -- server's `wg0.conf` already has the matching client public key as peer. Minimal schema change, no migration needed (fields are `Option` with `#[serde(default)]`).
-2. **Reuse `destroy_and_cleanup`** for orphan destroy -- no code duplication. The method already handles retry + exponential backoff + verification + session deletion (Principle: Composition over Inheritance).
-3. **`cleanup.rs` as thin utility** -- provides `cleanup_ssh_key` for post-crash SSH key cleanup that orphan detection discovers. The server cleanup reuses disconnect's `destroy_and_cleanup`.
-4. **`orphan.rs` methods on `ServerLifecycle`** -- consistent with `connect` and `disconnect` being `impl ServerLifecycle` methods.
-
-### C. Boundaries
-
-| File | Responsibility |
-| --- | --- |
-| `cleanup.rs` | Standalone SSH key cleanup (for keys left by crashed connect) |
-| `orphan.rs` | `check_orphaned_servers` + `resolve_orphaned_server` logic |
-| `mod.rs` | New error variants, module declarations |
-| `types.rs` | `OrphanedServer` struct |
-| `error.rs` | Error conversion for new `LifecycleError` variants |
-| `connect.rs` | Store `server_wireguard_public_key` + `client_wireguard_private_key` in `ActiveSession` |
-| `session_tracker.rs` | Add `server_wireguard_public_key` + `client_wireguard_private_key` fields to `ActiveSession` |
+---
 
 ## 3. Steps
 
-### Step 1: Foundation Types and Error Handling
+### Step 1: Implement disconnect, check_orphaned_servers, resolve_orphaned_server in server.rs
 
-- [x] **Status**: completed at 2026-03-05T14:02:00+07:00
-- **Scope**: `src-tauri/src/types.rs`, `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/error.rs`, `src-tauri/src/session_tracker.rs`, `src-tauri/src/server_lifecycle/connect.rs`
+- [x] **Status**: completed at 2026-03-05T14:20:00+07:00
+- **Scope**: `src-tauri/src/ipc/server.rs`
 - **Dependencies**: none
-- **Description**: Add `OrphanedServer` struct to types.rs. Add `server_wireguard_public_key: Option<String>` to `ActiveSession` in session_tracker.rs. Update connect.rs to store the server WG public key in the session. Add orphan-specific `LifecycleError` variants to mod.rs. Add corresponding `From<LifecycleError> for AppError` branches in error.rs.
+- **Description**: Replace the 3 NOT_IMPLEMENTED stubs with real implementations that delegate to `ServerLifecycle` domain methods. Follow the same pattern as the existing `connect` command.
 - **Acceptance Criteria**:
-  - `OrphanedServer` struct with fields: `server_id`, `provider`, `region`, `created_at`, `estimated_cost` (matching API design §4.C)
-  - `ActiveSession` has `server_wireguard_public_key: Option<String>` and `client_wireguard_private_key: Option<String>` fields (both `#[serde(default)]`)
-  - `connect()` stores server WG public key and client WG private key in session
-  - `LifecycleError::OrphanDetectionFailed(String)` variant added
-  - `LifecycleError::OrphanReconnectFailed(String)` variant added
-  - Error conversions map to appropriate AppError codes
-  - `cargo check` passes
+  - `disconnect` extracts `ServerLifecycle` and `Mutex<ProviderRegistry>` from state, delegates to `lifecycle.disconnect(&registry)`
+  - `check_orphaned_servers` extracts same state, delegates to `lifecycle.check_orphaned_servers(&registry)`
+  - `resolve_orphaned_server` extracts same state, takes `server_id: String` and `action: OrphanAction`, delegates to `lifecycle.resolve_orphaned_server(&server_id, action, &registry)`
+  - All errors auto-convert via existing `From<LifecycleError> for AppError`
+  - No raw string error codes -- use `From` conversion only
 
-### Step 2: Cleanup Utility and Orphan Detection Logic
+### Step 2: Implement get_session_status in session.rs
 
-- [x] **Status**: completed at 2026-03-05T14:08:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/cleanup.rs`, `src-tauri/src/server_lifecycle/orphan.rs`, `src-tauri/src/server_lifecycle/mod.rs`, `src-tauri/src/server_lifecycle/disconnect.rs`, `src-tauri/src/vpn_manager/keys.rs`
-- **Dependencies**: Step 1
-- **Description**: Create `cleanup.rs` with `cleanup_ssh_key` function. Create `orphan.rs` with `check_orphaned_servers` and `resolve_orphaned_server` methods on `ServerLifecycle`. Add `pub mod cleanup; pub mod orphan;` to mod.rs. Made `destroy_and_cleanup` `pub(crate)` for reuse from orphan.rs. Added `WireGuardKeyPair::from_private_key_base64` for reconnect key reconstruction.
+- [x] **Status**: completed at 2026-03-05T14:20:00+07:00
+- **Scope**: `src-tauri/src/ipc/session.rs`
+- **Dependencies**: none
+- **Description**: Replace the NOT_IMPLEMENTED stub with a real implementation that delegates to `SessionTracker::get_status()`.
 - **Acceptance Criteria**:
-  - `cleanup_ssh_key(provider, api_key, ssh_key_id)` -- deletes SSH key from provider (best-effort, logs error)
-  - `ServerLifecycle::check_orphaned_servers(registry)` -- reads session file, queries provider API, returns `Vec<OrphanedServer>` or empty vec. Clears stale state if server already gone
-  - `ServerLifecycle::resolve_orphaned_server(server_id, action, registry)` -- dispatches to destroy or reconnect path
-  - Destroy path: tunnel down (best-effort) → destroy server with verification → delete session → cleanup SSH key if present
-  - Reconnect path: verify server exists → reconstruct original WireGuard key pair from stored keys → tunnel up → update session timestamp
-  - `cargo check` passes
+  - `get_session_status` extracts `ServerLifecycle` from state, delegates to `lifecycle.session_tracker.get_status()`
+  - Returns `Option<SessionStatus>` (None when no active session)
+  - Error auto-converts via existing `From<SessionError> for AppError`
 
-### Step 3: Unit Tests and Verification
+### Step 3: Update build.rs AppManifest and Tauri capabilities
 
-- [x] **Status**: completed at 2026-03-05T14:12:00+07:00
-- **Scope**: `src-tauri/src/server_lifecycle/orphan.rs` (test module), `src-tauri/src/server_lifecycle/cleanup.rs` (test module), `src-tauri/src/vpn_manager/keys.rs` (test module)
-- **Dependencies**: Step 2
-- **Description**: Add comprehensive unit tests using mock providers. Verify all paths: no orphans, stale state cleanup, orphan found, destroy success, destroy failure, reconnect success. Added WireGuardKeyPair::from_private_key_base64 round-trip tests.
+- [x] **Status**: completed at 2026-03-05T14:21:00+07:00
+- **Scope**: `src-tauri/build.rs`, `src-tauri/capabilities/default.json`
+- **Dependencies**: Step 1, Step 2
+- **Description**: Configure `build.rs` with `AppManifest` to auto-generate `allow-<command>` / `deny-<command>` permission identifiers for all 11 IPC commands. Then reference those permissions in `default.json` so the frontend can invoke them. Without `AppManifest`, custom app commands are unrestricted (no IPC whitelist enforcement).
 - **Acceptance Criteria**:
-  - Test: no session file → returns empty vec
-  - Test: session exists but server gone → clears stale state, returns empty vec
-  - Test: session exists and server alive → returns `OrphanedServer` with correct fields
-  - Test: resolve destroy → calls `destroy_and_cleanup`, deletes session
-  - Test: resolve destroy with SSH key → also cleans up SSH key
-  - Test: resolve reconnect → reconstructs original WG keys from session, calls tunnel_up equivalent, returns `SessionStatus`
-  - `cargo test` passes (unit tests, no integration)
-  - `cargo clippy` clean
+  - `build.rs` uses `tauri_build::try_build` with `AppManifest::new().commands(&[...])` listing all 11 commands
+  - `default.json` references the auto-generated `allow-<command>` permissions for all 11 commands
+  - Only whitelisted commands are accessible from the frontend (NFR-SEC-7 scaffold)
+
+### Step 4: Compile and test verification
+
+- [x] **Status**: completed at 2026-03-05T14:22:00+07:00
+- **Scope**: full project
+- **Dependencies**: Step 1, Step 2, Step 3
+- **Description**: Run `cargo check` to verify compilation and `cargo test` to verify existing tests still pass.
+- **Acceptance Criteria**:
+  - `cargo check` passes with no errors
+  - `cargo test` passes (all existing unit tests)
+  - No new warnings introduced
+
+---
 
 ## 4. Execution Strategy
 
 | Step | Chain | Rationale |
 | --- | --- | --- |
-| 1 | Direct | Type additions across 5 files -- Operator has full context from planning, no scouting needed |
-| 2 | Direct | Core logic in 2 new files + 1 mod.rs line -- builds directly on Step 1 context |
-| 3 | Direct | Tests follow established MockProvider pattern from connect.rs/disconnect.rs |
+| 1 | Direct | 3 stub replacements in one file, established pattern |
+| 2 | Direct | 1 stub replacement, trivial |
+| 3 | Direct | build.rs + capabilities JSON update |
+| 4 | Direct | Compile + test commands |
 
-**Single-file constraint note**: `mod.rs` is touched by all 3 steps (Step 1: error variants, Step 2: pub mod lines). Resolution: **Sequential Direct** -- each step adds distinct, non-overlapping content.
+**Execution order**: Step 1 and Step 2 are independent (parallel-eligible but executed sequentially per policy). Step 3 after both. Step 4 last.
 
-**Execution order**: Step 1 → Step 2 → Step 3 (strictly sequential)
+```plain
+Step 1 → Step 2 → Step 3 → Step 4
+```
 
-**Estimated complexity**:
+**Estimated complexity**: All Trivial (< 5K tokens each)
 
-| Step | Tier | Rationale |
-| --- | --- | --- |
-| 1 | Simple | Struct/enum additions, field additions, pattern-matching branches |
-| 2 | Medium | Two new files with async logic, reuses existing patterns |
-| 3 | Medium | Multiple test cases with mock providers, follows existing test patterns |
-
-**Risk flags**:
-
-- Step 1: `ActiveSession` field additions (`server_wireguard_public_key`, `client_wireguard_private_key`) change serialization -- existing session files without these fields must still parse (serde `Option` with `#[serde(default)]` handles this). Client WG private key is stored on disk -- acceptable because session file is in app data directory and deleted on destroy
-- Step 2: Reconnect path depends on server's WireGuard config and systemd service surviving after crash/reboot. If server was terminated by provider or WG config was lost, reconnect will fail (acceptable -- user falls back to destroy)
+**Risk flags**: None
 
 ---

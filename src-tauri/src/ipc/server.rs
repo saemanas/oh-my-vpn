@@ -9,7 +9,7 @@ use crate::error::{codes, AppError};
 use crate::provider_manager::ProviderRegistry;
 use crate::server_lifecycle::ServerLifecycle;
 use crate::session_tracker::SessionStatus;
-use crate::types::Provider;
+use crate::types::{OrphanAction, OrphanedServer, Provider};
 
 /// Provision a VPN server on the given provider and region, then bring up the
 /// WireGuard tunnel.
@@ -53,12 +53,12 @@ pub async fn connect(
 
 /// Tear down the active WireGuard tunnel and destroy the remote server.
 #[tauri::command]
-pub async fn disconnect() -> Result<(), AppError> {
-    Err(AppError::new(
-        "NOT_IMPLEMENTED",
-        "disconnect is not yet implemented",
-        None,
-    ))
+pub async fn disconnect(
+    lifecycle: tauri::State<'_, ServerLifecycle>,
+    registry: tauri::State<'_, Mutex<ProviderRegistry>>,
+) -> Result<(), AppError> {
+    let status = lifecycle.disconnect(registry.inner()).await?;
+    Ok(status)
 }
 
 /// Scan all registered providers for servers that were provisioned by this app
@@ -66,12 +66,12 @@ pub async fn disconnect() -> Result<(), AppError> {
 ///
 /// Returns a `Vec<OrphanedServer>` JSON array.
 #[tauri::command]
-pub async fn check_orphaned_servers() -> Result<Vec<serde_json::Value>, AppError> {
-    Err(AppError::new(
-        "NOT_IMPLEMENTED",
-        "check_orphaned_servers is not yet implemented",
-        None,
-    ))
+pub async fn check_orphaned_servers(
+    lifecycle: tauri::State<'_, ServerLifecycle>,
+    registry: tauri::State<'_, Mutex<ProviderRegistry>>,
+) -> Result<Vec<OrphanedServer>, AppError> {
+    let orphans = lifecycle.check_orphaned_servers(registry.inner()).await?;
+    Ok(orphans)
 }
 
 /// Resolve a single orphaned server by either destroying it or reconnecting to
@@ -83,13 +83,13 @@ pub async fn check_orphaned_servers() -> Result<Vec<serde_json::Value>, AppError
 /// - `null` when action is `"destroy"`
 #[tauri::command]
 pub async fn resolve_orphaned_server(
+    lifecycle: tauri::State<'_, ServerLifecycle>,
+    registry: tauri::State<'_, Mutex<ProviderRegistry>>,
     server_id: String,
-    action: String,
-) -> Result<Option<serde_json::Value>, AppError> {
-    let _ = (server_id, action);
-    Err(AppError::new(
-        "NOT_IMPLEMENTED",
-        "resolve_orphaned_server is not yet implemented",
-        None,
-    ))
+    action: OrphanAction,
+) -> Result<Option<SessionStatus>, AppError> {
+    let result = lifecycle
+        .resolve_orphaned_server(&server_id, action, registry.inner())
+        .await?;
+    Ok(result)
 }

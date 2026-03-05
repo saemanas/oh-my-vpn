@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-orphaned-servers"
+description = "Enables the check_orphaned_servers command without any pre-configured scope."
+commands.allow = ["check_orphaned_servers"]
+
+[[permission]]
+identifier = "deny-check-orphaned-servers"
+description = "Denies the check_orphaned_servers command without any pre-configured scope."
+commands.deny = ["check_orphaned_servers"]
