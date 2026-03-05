@@ -41,6 +41,9 @@ pub struct ActiveSession {
     pub server_id: String,
     pub provider: Provider,
     pub region: String,
+    /// Human-readable region name (e.g., "Falkenstein, DE · Hetzner").
+    #[serde(default)]
+    pub region_display_name: String,
     pub server_ip: String,
     pub created_at: String,
     pub hourly_cost: f64,
@@ -60,6 +63,8 @@ pub struct ActiveSession {
 pub struct SessionStatus {
     pub provider: Provider,
     pub region: String,
+    /// Human-readable region name (e.g., "Falkenstein, DE · Hetzner").
+    pub region_display_name: String,
     pub server_ip: String,
     pub elapsed_seconds: u64,
     pub hourly_cost: f64,
@@ -146,7 +151,12 @@ impl SessionTracker {
 
         Ok(Some(SessionStatus {
             provider: session.provider,
-            region: session.region,
+            region: session.region.clone(),
+            region_display_name: if session.region_display_name.is_empty() {
+                session.region
+            } else {
+                session.region_display_name
+            },
             server_ip: session.server_ip,
             elapsed_seconds,
             hourly_cost: session.hourly_cost,
@@ -179,6 +189,7 @@ mod tests {
             server_id: "srv-123".to_string(),
             provider: Provider::Hetzner,
             region: "fsn1".to_string(),
+            region_display_name: "Falkenstein, DE".to_string(),
             server_ip: "1.2.3.4".to_string(),
             created_at: Utc::now().to_rfc3339(),
             hourly_cost: 0.007,
@@ -242,6 +253,7 @@ mod tests {
             server_id: "srv-abc".to_string(),
             provider: Provider::Hetzner,
             region: "fsn1".to_string(),
+            region_display_name: "Falkenstein, DE".to_string(),
             server_ip: "5.6.7.8".to_string(),
             created_at: two_seconds_ago.to_rfc3339(),
             hourly_cost: 0.007,

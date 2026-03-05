@@ -77,6 +77,8 @@ export interface SessionStatus {
   provider: Provider;
   /** Cloud region code, e.g. "fsn1". */
   region: string;
+  /** Human-readable region name, e.g. "Falkenstein, DE". */
+  regionDisplayName: string;
   /** Public IP address of the VPN server. */
   serverIp: string;
   /** Seconds elapsed since the session started. */

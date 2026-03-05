@@ -191,6 +191,7 @@ mod tests {
             server_id: "mock-server-123".to_string(),
             provider: Provider::Hetzner,
             region: "fsn1".to_string(),
+            region_display_name: "Falkenstein, DE".to_string(),
             server_ip: "1.2.3.4".to_string(),
             created_at: Utc::now().to_rfc3339(),
             hourly_cost: 0.007,

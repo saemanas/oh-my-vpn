@@ -212,18 +212,19 @@ impl ServerLifecycle {
 
         // Step 11: Create session + update preferences.
         // Look up hourly cost from the provider's region list.
-        let hourly_cost = match cloud_provider.list_regions(&api_key).await {
+        let (hourly_cost, region_display_name) = match cloud_provider.list_regions(&api_key).await {
             Ok(regions) => regions.iter()
                 .find(|r| r.region == region)
-                .map(|r| r.hourly_cost)
-                .unwrap_or(0.0),
-            Err(_) => 0.0,
+                .map(|r| (r.hourly_cost, r.display_name.clone()))
+                .unwrap_or((0.0, region.to_string())),
+            Err(_) => (0.0, region.to_string()),
         };
 
         let session = ActiveSession {
             server_id: server_info.server_id.clone(),
             provider: provider.clone(),
             region: region.to_string(),
+            region_display_name,
             server_ip: server_info.public_ip.clone(),
             created_at: Utc::now().to_rfc3339(),
             hourly_cost,
