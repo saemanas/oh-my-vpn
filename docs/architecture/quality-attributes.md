@@ -128,3 +128,5 @@ Weekly tests (P-3, P-4) involve real cloud provider API calls that incur costs. 
 - **Quarterly**: Reassess thresholds and attribute relevance
 - **On new ADR**: Check if the decision affects any fitness function threshold
 - **On provider addition**: Extend R-1, R-2, T-2 to cover the new provider
+
+---

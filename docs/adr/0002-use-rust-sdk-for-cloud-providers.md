@@ -79,3 +79,5 @@ Each cloud provider implements a common `ProviderTrait`. The SDK crate is encaps
 
 - Related: [ADR-0001](0001-use-wireguard-go-with-wg-quick.md), [ADR-0006](0006-all-providers-in-mvp.md), PRD OQ-2, Risk R-5, Risk R-7
 - Principles: Dependency Inversion, Single Responsibility
+
+---

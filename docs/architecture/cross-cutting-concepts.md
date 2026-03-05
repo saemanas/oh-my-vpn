@@ -262,3 +262,5 @@ Oh My VPN requires sudo privileges for `wg-quick` tunnel creation ([ADR-0001](..
 2. Navigates users to the relevant macOS System Settings pane if permissions need attention
 
 This is informational only -- the app does not programmatically request or manage macOS permissions beyond the `osascript` sudo dialog that appears during each tunnel creation. The sudo dialog is a macOS system prompt, not an app-controlled flow.
+
+---

@@ -42,3 +42,5 @@ CI Pipeline (auto-label for review)
 ```
 
 For small projects like Oh My VPN (single desktop app, solo developer), the auto-label + PR checklist combination provides sufficient coverage. Automated dependency graph comparison (e.g., `cargo modules`) can be added when the module count exceeds 10.
+
+---

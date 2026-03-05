@@ -67,3 +67,5 @@ All three providers ship together in v1.0, but development proceeds sequentially
 
 - Related: [ADR-0002](0002-use-rust-sdk-for-cloud-providers.md), [ADR-0005](0005-use-provider-pricing-api.md), PRD OQ-5
 - Principles: Composition over Inheritance (trait-based provider abstraction)
+
+---

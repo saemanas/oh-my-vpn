@@ -53,3 +53,5 @@ Chosen option: "Top 3 attributes for MVP, expand to 5 in v1.1", because it balan
 
 - Defines: [quality-attributes.md](../architecture/quality-attributes.md)
 - Principles: Fail Fast (SYSTEM.md §3.B #5), Documentation as Code (SYSTEM.md §3.B #6)
+
+---

@@ -69,3 +69,5 @@ The sudo path (blue) keeps the app as a single binary -- no separate Network Ext
 
 - Related: [ADR-0001](0001-use-wireguard-go-with-wg-quick.md), PRD OQ-3
 - Principles: Reversibility, Fail Fast
+
+---

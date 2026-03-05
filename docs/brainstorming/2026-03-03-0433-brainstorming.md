@@ -291,3 +291,5 @@ All 7 clusters starred.
 55. E2E testing via tauri-webdriver (open-source W3C WebDriver for macOS WKWebView)
 56. Multi-layer test strategy: cargo test (Rust) + Vitest (TS) + Playwright (web) + tauri-webdriver (native)
 57. CI integration for automated E2E tests on macOS
+
+---

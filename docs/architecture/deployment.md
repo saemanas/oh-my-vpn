@@ -117,3 +117,5 @@ Supporting three cloud providers (Hetzner, AWS, GCP) means:
 | User's macOS | App runtime, credential storage, VPN client | Permanent (app installed) |
 | Cloud VPN server | WireGuard endpoint | Ephemeral (minutes to hours) |
 | Cloud provider API | Server management | Always available (external) |
+
+---

@@ -92,3 +92,5 @@ All architectural open questions from the PRD have been resolved via ADRs:
 | OQ-5 | Support all three providers in MVP | [ADR-0006](../adr/0006-all-providers-in-mvp.md) |
 | OQ-6 | Tauri updater with GitHub Releases fallback | [ADR-0007](../adr/0007-tauri-updater-with-github-releases.md) |
 | OQ-7 | Ephemeral SSH keys per session | [ADR-0004](../adr/0004-ephemeral-ssh-keys-per-session.md) |
+
+---
