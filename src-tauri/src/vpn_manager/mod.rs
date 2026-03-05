@@ -4,4 +4,5 @@
 //! and tear down VPN tunnels. Manages ephemeral key generation
 //! and configuration file lifecycle.
 
+pub mod config;
 pub mod keys;
