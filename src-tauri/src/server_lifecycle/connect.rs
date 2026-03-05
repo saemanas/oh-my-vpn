@@ -5,6 +5,8 @@
 //! WireGuard tunnel, and persist session state. Auto-cleanup on any failure.
 
 use chrono::Utc;
+use serde::Serialize;
+use tauri::Emitter;
 use zeroize::Zeroize;
 
 use crate::keychain_adapter::KeychainAdapter;
@@ -18,6 +20,18 @@ use super::cloud_init::build_cloud_init;
 use super::ssh_keys::SshKeyPair;
 use super::LifecycleError;
 use super::ServerLifecycle;
+
+// ── ConnectProgress ─────────────────────────────────────────────────────────
+
+/// Progress event payload emitted during the connect flow.
+///
+/// - step 1: Creating server (SSH key generation → server provisioning)
+/// - step 2: Installing WireGuard (SSH key cleanup)
+/// - step 3: Connecting tunnel (WireGuard tunnel up → session creation)
+#[derive(Clone, Serialize)]
+pub struct ConnectProgress {
+    pub step: u8,
+}
 
 // ── ConnectCleanup ──────────────────────────────────────────────────────────
 
@@ -132,6 +146,7 @@ impl ServerLifecycle {
         provider: Provider,
         region: &str,
         registry: &tokio::sync::Mutex<ProviderRegistry>,
+        app: &tauri::AppHandle,
     ) -> Result<SessionStatus, LifecycleError> {
         // Step 1: Verify no active session.
         if self.session_tracker.read_session()
@@ -159,6 +174,9 @@ impl ServerLifecycle {
 
         // Initialize cleanup guard.
         let mut cleanup = ConnectCleanup::new(cloud_provider, &api_key);
+
+        // Emit progress: step 1 -- Creating server.
+        let _ = app.emit("connect-progress", ConnectProgress { step: 1 });
 
         // Step 3: Generate SSH key pair.
         let ssh_key_pair = SshKeyPair::generate()?;
@@ -189,6 +207,9 @@ impl ServerLifecycle {
             .map_err(|e| LifecycleError::ProvisioningFailed(format!("{e:?}")))?;
         cleanup.track_server(server_info.server_id.clone());
 
+        // Emit progress: step 2 -- Installing WireGuard.
+        let _ = app.emit("connect-progress", ConnectProgress { step: 2 });
+
         // Step 8: Delete SSH key from provider (no longer needed).
         let _ = cloud_provider
             .delete_ssh_key(&api_key, &ssh_key_id)
@@ -198,6 +219,9 @@ impl ServerLifecycle {
         // Step 9: Zero SSH key material (happens automatically via Drop/Zeroize,
         // but we drop explicitly here for clarity).
         drop(ssh_key_pair);
+
+        // Emit progress: step 3 -- Connecting tunnel.
+        let _ = app.emit("connect-progress", ConnectProgress { step: 3 });
 
         // Step 10: Bring up WireGuard tunnel.
         tunnel::tunnel_up(
