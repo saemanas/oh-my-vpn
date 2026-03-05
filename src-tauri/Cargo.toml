@@ -37,4 +37,5 @@ google-cloud-auth = "1.6"
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 zeroize = { version = "1.8", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
 
